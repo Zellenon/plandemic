@@ -1,8 +1,27 @@
 import pygame
 import random
-from typing import Dict, List, Set, Tuple
 from dataclasses import dataclass
-import os
+from typing import Dict, List, Set, Tuple, Optional, Union
+from enum import Enum
+from collections import deque
+
+
+class PlanType(Enum):
+    STAY = "stay"
+    GOTO_ROOM = "goto_room"
+    FIND_TOKEN = "find_token"
+
+
+@dataclass
+class Plan:
+    type: PlanType
+    target: Union[str, int, None]  # Room ID for GOTO_ROOM, Token ID for FIND_TOKEN
+    turns_remaining: int = 0
+    visited_rooms: Set[str] = set()
+
+    def __post_init__(self):
+        if self.visited_rooms is None:
+            self.visited_rooms = set()
 
 
 @dataclass
@@ -15,10 +34,12 @@ class Room:
 
 @dataclass
 class Token:
+    id: int
     x: int
     y: int
     color: Tuple[int, int, int]
     current_room: str
+    plan: Optional[Plan] = None
 
 
 class BoardGame:
@@ -144,11 +165,14 @@ class BoardGame:
     def initialize_tokens(self, num_tokens: int):
         """Place tokens randomly on the board."""
         room_ids = list(self.rooms.keys())
+        self.tokens: List[Token] = []
+
         for i in range(num_tokens):
             room_id = random.choice(room_ids)
             room = self.rooms[room_id]
             x, y = random.choice(list(room.cells))
             token = Token(
+                id=i,
                 x=x,
                 y=y,
                 color=(
@@ -157,50 +181,128 @@ class BoardGame:
                     random.randint(0, 255),
                 ),
                 current_room=room_id,
+                plan=None,
             )
             self.tokens.append(token)
 
-    def move_tokens(self):
-        """Move all tokens to random connected rooms."""
-        for token in self.tokens:
-            current_room = self.rooms[token.current_room]
-            if current_room.connected_rooms:
-                next_room_id = random.choice(list(current_room.connected_rooms))
-                next_room = self.rooms[next_room_id]
-                new_pos = random.choice(list(next_room.cells))
+    def choose_new_plan(self, token: Token) -> Plan:
+        """Choose a random new plan for a token."""
+        plan_type = random.choice(list(PlanType))
+
+        if plan_type == PlanType.STAY:
+            return Plan(
+                type=PlanType.STAY, target=None, turns_remaining=random.randint(1, 4)
+            )
+
+        elif plan_type == PlanType.GOTO_ROOM:
+            # Choose a random room that's not the current room
+            available_rooms = [
+                room_id
+                for room_id in self.rooms.keys()
+                if room_id != token.current_room
+            ]
+            target_room = random.choice(available_rooms)
+            return Plan(
+                type=PlanType.GOTO_ROOM,
+                target=target_room,
+                visited_rooms={token.current_room},
+            )
+
+        else:  # FIND_TOKEN
+            # Choose a random token that's not this one
+            available_tokens = [t.id for t in self.tokens if t.id != token.id]
+            target_token = random.choice(available_tokens)
+            return Plan(
+                type=PlanType.FIND_TOKEN,
+                target=target_token,
+                visited_rooms={token.current_room},
+            )
+
+    def find_path_to_room(
+        self, start_room: str, target_room: str
+    ) -> Optional[List[str]]:
+        """Find the shortest path between two rooms using BFS."""
+        if start_room == target_room:
+            return [start_room]
+
+        queue = deque([(start_room, [start_room])])
+        visited = {start_room}
+
+        while queue:
+            current_room, path = queue.popleft()
+            for next_room in self.rooms[current_room].connected_rooms:
+                if next_room == target_room:
+                    return path + [next_room]
+                if next_room not in visited:
+                    visited.add(next_room)
+                    queue.append((next_room, path + [next_room]))
+
+        return None
+
+    def get_unvisited_connected_room(self, token: Token) -> Optional[str]:
+        """Get a random unvisited connected room, or any connected room if all have been visited."""
+        current_room = self.rooms[token.current_room]
+        unvisited = [
+            room
+            for room in current_room.connected_rooms
+            if room not in (token.plan.visited_rooms if token.plan else [])
+        ]
+
+        if unvisited:
+            return random.choice(unvisited)
+        return (
+            random.choice(list(current_room.connected_rooms))
+            if current_room.connected_rooms
+            else None
+        )
+
+    def execute_plan(self, token: Token):
+        """Execute the token's current plan."""
+        if token.plan is None:
+            token.plan = self.choose_new_plan(token)
+            return
+
+        if token.plan.type == PlanType.STAY:
+            token.plan.turns_remaining -= 1
+            if token.plan.turns_remaining <= 0:
+                token.plan = None
+            return
+
+        elif token.plan.type == PlanType.GOTO_ROOM:
+            path = self.find_path_to_room(token.current_room, token.plan.target)
+            if path and len(path) > 1:
+                # Move to next room in path
+                next_room = path[1]
+                new_pos = random.choice(list(self.rooms[next_room].cells))
                 token.x, token.y = new_pos
-                token.current_room = next_room_id
+                token.current_room = next_room
+            else:
+                # Either reached target or no path exists
+                token.plan = None
+            return
 
-    def draw_border(
-        self, start: Tuple[int, int], end: Tuple[int, int], room1: str, room2: str
-    ):
-        """Draw a border line segment, either solid or dotted."""
-        start_pixel = (start[0] * self.CELL_SIZE, start[1] * self.CELL_SIZE)
-        end_pixel = (end[0] * self.CELL_SIZE, end[1] * self.CELL_SIZE)
+        elif token.plan.type == PlanType.FIND_TOKEN:
+            target_token = self.tokens[token.plan.target]
+            if token.current_room == target_token.current_room:
+                # Found the target token
+                token.plan = None
+                return
 
-        # Check if rooms are connected by a door
-        is_door = room2 in self.doors.get(room1, set())
+            # Try to move to an unvisited connected room
+            next_room = self.get_unvisited_connected_room(token)
+            if next_room:
+                token.plan.visited_rooms.add(next_room)
+                new_pos = random.choice(list(self.rooms[next_room].cells))
+                token.x, token.y = new_pos
+                token.current_room = next_room
+            else:
+                # No more rooms to explore
+                token.plan = None
 
-        if is_door:
-            # Draw dotted line
-            length = (
-                (end_pixel[0] - start_pixel[0]) ** 2
-                + (end_pixel[1] - start_pixel[1]) ** 2
-            ) ** 0.5
-            dash_length = 5
-            num_dashes = int(length / (dash_length * 2))
-
-            for i in range(num_dashes):
-                t1 = i / num_dashes
-                t2 = (i + 0.5) / num_dashes
-                x1 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t1
-                y1 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t1
-                x2 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t2
-                y2 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t2
-                pygame.draw.line(self.screen, (0, 0, 0), (x1, y1), (x2, y2), 2)
-        else:
-            # Draw solid line
-            pygame.draw.line(self.screen, (0, 0, 0), start_pixel, end_pixel, 2)
+    def move_tokens(self):
+        """Move all tokens according to their plans."""
+        for token in self.tokens:
+            self.execute_plan(token)
 
     def draw(self):
         """Draw the current game state."""
@@ -224,8 +326,9 @@ class BoardGame:
         for start, end, room1, room2 in self.borders:
             self.draw_border(start, end, room1, room2)
 
-        # Draw tokens
+        # Draw tokens with their plan types indicated
         for token in self.tokens:
+            # Draw the token
             pygame.draw.circle(
                 self.screen,
                 token.color,
@@ -235,6 +338,24 @@ class BoardGame:
                 ),
                 self.CELL_SIZE // 3,
             )
+
+            # Draw a small indicator of the token's plan
+            if token.plan:
+                indicator_color = {
+                    PlanType.STAY: (255, 255, 255),  # White
+                    PlanType.GOTO_ROOM: (0, 0, 0),  # Black
+                    PlanType.FIND_TOKEN: (255, 0, 0),  # Red
+                }[token.plan.type]
+
+                pygame.draw.circle(
+                    self.screen,
+                    indicator_color,
+                    (
+                        token.x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                        token.y * self.CELL_SIZE + self.CELL_SIZE // 2,
+                    ),
+                    self.CELL_SIZE // 8,
+                )
 
         # Draw button
         pygame.draw.rect(self.screen, (200, 200, 200), self.button_rect)
