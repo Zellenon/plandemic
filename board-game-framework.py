@@ -1,6 +1,7 @@
 import pygame
+import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple, Optional, Union
 from enum import Enum
 from collections import deque
@@ -15,9 +16,10 @@ class PlanType(Enum):
 @dataclass
 class Plan:
     type: PlanType
-    target: Union[str, int, None]  # Room ID for GOTO_ROOM, Token ID for FIND_TOKEN
+    # Room ID for GOTO_ROOM, Token ID for FIND_TOKEN
+    target: Union[str, int, None]
     turns_remaining: int = 0
-    visited_rooms: Set[str] = set()
+    visited_rooms: Set[str] = field(default_factory=set)
 
     def __post_init__(self):
         if self.visited_rooms is None:
@@ -256,6 +258,37 @@ class BoardGame:
             else None
         )
 
+    def draw_border(
+        self, start: Tuple[int, int], end: Tuple[int, int], room1: str, room2: str
+    ):
+        """Draw a border line segment, either solid or dotted."""
+        start_pixel = (start[0] * self.CELL_SIZE, start[1] * self.CELL_SIZE)
+        end_pixel = (end[0] * self.CELL_SIZE, end[1] * self.CELL_SIZE)
+
+        # Check if rooms are connected by a door
+        is_door = room2 in self.doors.get(room1, set())
+
+        if is_door:
+            # Draw dotted line
+            length = (
+                (end_pixel[0] - start_pixel[0]) ** 2
+                + (end_pixel[1] - start_pixel[1]) ** 2
+            ) ** 0.5
+            dash_length = 5
+            num_dashes = int(length / (dash_length * 2))
+
+            for i in range(num_dashes):
+                t1 = i / num_dashes
+                t2 = (i + 0.5) / num_dashes
+                x1 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t1
+                y1 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t1
+                x2 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t2
+                y2 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t2
+                pygame.draw.line(self.screen, (0, 0, 0), (x1, y1), (x2, y2), 2)
+        else:
+            # Draw solid line
+            pygame.draw.line(self.screen, (0, 0, 0), start_pixel, end_pixel, 2)
+
     def execute_plan(self, token: Token):
         """Execute the token's current plan."""
         if token.plan is None:
@@ -341,21 +374,96 @@ class BoardGame:
 
             # Draw a small indicator of the token's plan
             if token.plan:
-                indicator_color = {
-                    PlanType.STAY: (255, 255, 255),  # White
-                    PlanType.GOTO_ROOM: (0, 0, 0),  # Black
-                    PlanType.FIND_TOKEN: (255, 0, 0),  # Red
-                }[token.plan.type]
-
-                pygame.draw.circle(
-                    self.screen,
-                    indicator_color,
-                    (
-                        token.x * self.CELL_SIZE + self.CELL_SIZE // 2,
-                        token.y * self.CELL_SIZE + self.CELL_SIZE // 2,
-                    ),
-                    self.CELL_SIZE // 8,
-                )
+                if token.plan.type == PlanType.STAY:
+                    # Draw an empty box inside the token
+                    pygame.draw.rect(
+                        self.screen,
+                        (0, 0, 0),
+                        (
+                            token.x * self.CELL_SIZE + self.CELL_SIZE // 4,
+                            token.y * self.CELL_SIZE + self.CELL_SIZE // 4,
+                            self.CELL_SIZE // 2,
+                            self.CELL_SIZE // 2,
+                        ),
+                        1,
+                    )
+                elif token.plan.type == PlanType.GOTO_ROOM:
+                    # Draw an arrow pointing towards the desired room
+                    target_room = token.plan.target
+                    target_x, target_y = next(
+                        (
+                            (x, y)
+                            for x, y in self.rooms[target_room].cells
+                            if (x, y) != (token.x, token.y)
+                        ),
+                        None,
+                    )
+                    if target_x is not None and target_y is not None:
+                        dx = target_x - token.x
+                        dy = target_y - token.y
+                        length = (dx**2 + dy**2) ** 0.5
+                        if length > 0:
+                            angle = math.atan2(dy, dx)
+                            end_x = token.x * self.CELL_SIZE + self.CELL_SIZE // 2
+                            end_y = token.y * self.CELL_SIZE + self.CELL_SIZE // 2
+                            tip_x = end_x + int(self.CELL_SIZE // 2 * dx / length)
+                            tip_y = end_y + int(self.CELL_SIZE // 2 * dy / length)
+                            pygame.draw.line(
+                                self.screen,
+                                (0, 0, 0),
+                                (
+                                    token.x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                                    token.y * self.CELL_SIZE + self.CELL_SIZE // 2,
+                                ),
+                                (tip_x, tip_y),
+                                2,
+                            )
+                            pygame.draw.line(
+                                self.screen,
+                                (0, 0, 0),
+                                (tip_x, tip_y),
+                                (
+                                    tip_x + int(self.CELL_SIZE // 8 * dx / length),
+                                    tip_y + int(self.CELL_SIZE // 8 * dy / length),
+                                ),
+                                2,
+                            )
+                elif token.plan.type == PlanType.FIND_TOKEN:
+                    # Draw an arrow pointing towards the desired token
+                    target_token = self.tokens[token.plan.target]
+                    target_x, target_y = (
+                        target_token.x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                        target_token.y * self.CELL_SIZE + self.CELL_SIZE // 2,
+                    )
+                    dx = target_x - token.x * self.CELL_SIZE - self.CELL_SIZE // 2
+                    dy = target_y - token.y * self.CELL_SIZE - self.CELL_SIZE // 2
+                    length = (dx**2 + dy**2) ** 0.5
+                    if length > 0:
+                        angle = math.atan2(dy, dx)
+                        end_x = token.x * self.CELL_SIZE + self.CELL_SIZE // 2
+                        end_y = token.y * self.CELL_SIZE + self.CELL_SIZE // 2
+                        tip_x = end_x + int(self.CELL_SIZE // 2 * dx / length)
+                        tip_y = end_y + int(self.CELL_SIZE // 2 * dy / length)
+                        pygame.draw.line(
+                            self.screen,
+                            (255, 0, 0),
+                            (
+                                token.x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                                token.y * self.CELL_SIZE + self.CELL_SIZE // 2,
+                            ),
+                            (tip_x, tip_y),
+                            2,
+                        )
+                        pygame.draw.line(
+                            self.screen,
+                            (255, 0, 0),
+                            (tip_x, tip_y),
+                            (
+                                tip_x + int(self.CELL_SIZE // 8 * dx / length),
+                                tip_y + int(self.CELL_SIZE // 8 * dy / length),
+                            ),
+                            2,
+                        )
 
         # Draw button
         pygame.draw.rect(self.screen, (200, 200, 200), self.button_rect)
