@@ -73,3 +73,107 @@ class Token:
             )
 
         self.plan = new_plan
+
+    def draw(self, board):
+        pygame.draw.circle(
+            board.screen,
+            self.color,
+            (
+                self.x * board.CELL_SIZE + board.CELL_SIZE // 2,
+                self.y * board.CELL_SIZE + board.CELL_SIZE // 2,
+            ),
+            board.CELL_SIZE // 3,
+        )
+
+        # Draw a small indicator of the self's plan
+        if self.plan:
+            if self.plan.type == PlanType.STAY:
+                # Draw an empty box inside the self
+                pygame.draw.rect(
+                    board.screen,
+                    (0, 0, 0),
+                    (
+                        self.x * board.CELL_SIZE + board.CELL_SIZE // 4,
+                        self.y * board.CELL_SIZE + board.CELL_SIZE // 4,
+                        board.CELL_SIZE // 2,
+                        board.CELL_SIZE // 2,
+                    ),
+                    1,
+                )
+            elif self.plan.type == PlanType.GOTO_ROOM:
+                # Draw an arrow pointing towards the desired room
+                target_room = self.plan.target
+                target_x, target_y = next(
+                    (
+                        (x, y)
+                        for x, y in board.rooms[target_room].cells
+                        if (x, y) != (self.x, self.y)
+                    ),
+                    None,
+                )
+                if target_x is not None and target_y is not None:
+                    dx = target_x - self.x
+                    dy = target_y - self.y
+                    length = (dx**2 + dy**2) ** 0.5
+                    if length > 0:
+                        angle = math.atan2(dy, dx)
+                        end_x = self.x * board.CELL_SIZE + board.CELL_SIZE // 2
+                        end_y = self.y * board.CELL_SIZE + board.CELL_SIZE // 2
+                        tip_x = end_x + int(board.CELL_SIZE // 2 * dx / length)
+                        tip_y = end_y + int(board.CELL_SIZE // 2 * dy / length)
+                        pygame.draw.line(
+                            board.screen,
+                            (0, 0, 0),
+                            (
+                                self.x * board.CELL_SIZE + board.CELL_SIZE // 2,
+                                self.y * board.CELL_SIZE + board.CELL_SIZE // 2,
+                            ),
+                            (tip_x, tip_y),
+                            2,
+                        )
+                        pygame.draw.line(
+                            board.screen,
+                            (0, 0, 0),
+                            (tip_x, tip_y),
+                            (
+                                tip_x + int(board.CELL_SIZE // 8 * dx / length),
+                                tip_y + int(board.CELL_SIZE // 8 * dy / length),
+                            ),
+                            2,
+                        )
+            elif self.plan.type == PlanType.FIND_TOKEN:
+                # Draw an arrow pointing towards the desired self
+                target_self = board.tokens[self.plan.target]
+                target_x, target_y = (
+                    target_self.x * board.CELL_SIZE + board.CELL_SIZE // 2,
+                    target_self.y * board.CELL_SIZE + board.CELL_SIZE // 2,
+                )
+                dx = target_x - self.x * board.CELL_SIZE - board.CELL_SIZE // 2
+                dy = target_y - self.y * board.CELL_SIZE - board.CELL_SIZE // 2
+                length = (dx**2 + dy**2) ** 0.5
+                if length > 0:
+                    angle = math.atan2(dy, dx)
+                    end_x = self.x * board.CELL_SIZE + board.CELL_SIZE // 2
+                    end_y = self.y * board.CELL_SIZE + board.CELL_SIZE // 2
+                    tip_x = end_x + int(board.CELL_SIZE // 2 * dx / length)
+                    tip_y = end_y + int(board.CELL_SIZE // 2 * dy / length)
+                    pygame.draw.line(
+                        board.screen,
+                        (255, 0, 0),
+                        (
+                            self.x * board.CELL_SIZE + board.CELL_SIZE // 2,
+                            self.y * board.CELL_SIZE + board.CELL_SIZE // 2,
+                        ),
+                        (tip_x, tip_y),
+                        2,
+                    )
+                    pygame.draw.line(
+                        board.screen,
+                        (255, 0, 0),
+                        (tip_x, tip_y),
+                        (
+                            tip_x + int(board.CELL_SIZE // 8 * dx / length),
+                            tip_y + int(board.CELL_SIZE // 8 * dy / length),
+                        ),
+                        2,
+                    )
