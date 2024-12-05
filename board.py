@@ -18,16 +18,6 @@ class Room:
     color: Tuple[int, int, int]
 
 
-@dataclass
-class Token:
-    id: int
-    x: int
-    y: int
-    color: Tuple[int, int, int]
-    current_room: str
-    plan: Optional[Plan] = None
-
-
 class BoardGame:
     def __init__(self, board_file: str, doors_file: str, num_tokens: int):
         pygame.init()
