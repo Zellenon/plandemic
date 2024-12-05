@@ -7,6 +7,7 @@ from enum import Enum
 from collections import deque
 
 from agents import Token, Plan, PlanType
+from controller import GameController
 
 
 @dataclass
@@ -34,6 +35,8 @@ class BoardGame:
         self.rooms: Dict[str, Room] = {}
         self.tokens: List[Token] = []
         self.doors: Dict[str, Set[str]] = {}
+
+        self.controller = GameController(self)
 
         # Load and parse the board and doors files
         self.load_doors(doors_file)
@@ -170,39 +173,6 @@ class BoardGame:
             )
             self.tokens.append(token)
 
-    def choose_new_plan(self, token: Token) -> Plan:
-        """Choose a random new plan for a token."""
-        plan_type = random.choice(list(PlanType))
-
-        if plan_type == PlanType.STAY:
-            return Plan(
-                type=PlanType.STAY, target=None, turns_remaining=random.randint(1, 4)
-            )
-
-        elif plan_type == PlanType.GOTO_ROOM:
-            # Choose a random room that's not the current room
-            available_rooms = [
-                room_id
-                for room_id in self.rooms.keys()
-                if room_id != token.current_room
-            ]
-            target_room = random.choice(available_rooms)
-            return Plan(
-                type=PlanType.GOTO_ROOM,
-                target=target_room,
-                visited_rooms={token.current_room},
-            )
-
-        else:  # FIND_TOKEN
-            # Choose a random token that's not this one
-            available_tokens = [t.id for t in self.tokens if t.id != token.id]
-            target_token = random.choice(available_tokens)
-            return Plan(
-                type=PlanType.FIND_TOKEN,
-                target=target_token,
-                visited_rooms={token.current_room},
-            )
-
     def find_path_to_room(
         self, start_room: str, target_room: str
     ) -> Optional[List[str]]:
@@ -274,15 +244,12 @@ class BoardGame:
 
     def execute_plan(self, token: Token):
         """Execute the token's current plan."""
-        if token.plan is None:
-            token.plan = self.choose_new_plan(token)
-            return
+        token.ensure_plan(self)
 
         if token.plan.type == PlanType.STAY:
             token.plan.turns_remaining -= 1
             if token.plan.turns_remaining <= 0:
                 token.plan = None
-            return
 
         elif token.plan.type == PlanType.GOTO_ROOM:
             path = self.find_path_to_room(token.current_room, token.plan.target)
@@ -295,25 +262,26 @@ class BoardGame:
             else:
                 # Either reached target or no path exists
                 token.plan = None
-            return
 
         elif token.plan.type == PlanType.FIND_TOKEN:
             target_token = self.tokens[token.plan.target]
             if token.current_room == target_token.current_room:
                 # Found the target token
                 token.plan = None
-                return
 
-            # Try to move to an unvisited connected room
-            next_room = self.get_unvisited_connected_room(token)
-            if next_room:
-                token.plan.visited_rooms.add(next_room)
-                new_pos = random.choice(list(self.rooms[next_room].cells))
-                token.x, token.y = new_pos
-                token.current_room = next_room
             else:
-                # No more rooms to explore
-                token.plan = None
+                # Try to move to an unvisited connected room
+                next_room = self.get_unvisited_connected_room(token)
+                if next_room:
+                    token.plan.visited_rooms.add(next_room)
+                    new_pos = random.choice(list(self.rooms[next_room].cells))
+                    token.x, token.y = new_pos
+                    token.current_room = next_room
+                else:
+                    # No more rooms to explore
+                    token.plan = None
+
+        token.ensure_plan(self)
 
     def move_tokens(self):
         """Move all tokens according to their plans."""
@@ -449,11 +417,6 @@ class BoardGame:
                         )
 
         # Draw button
-        pygame.draw.rect(self.screen, (200, 200, 200), self.button_rect)
-        font = pygame.font.Font(None, 36)
-        text = font.render("Next Turn", True, (0, 0, 0))
-        text_rect = text.get_rect(center=self.button_rect.center)
-        self.screen.blit(text, text_rect)
 
     def run(self):
         """Main game loop."""
@@ -462,10 +425,8 @@ class BoardGame:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.button_rect.collidepoint(event.pos):
-                        self.move_tokens()
 
+            self.controller.handle_events()
             self.draw()
             pygame.display.flip()
 
