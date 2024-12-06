@@ -6,8 +6,10 @@ from typing import Dict, List, Set, Tuple, Optional, Union
 from enum import Enum
 from collections import deque
 
-from agents import Token, Plan, PlanType
+from agents import Agent, Plan, PlanType
 from controller import GameController
+from conversation_handler import handle_room_conversations
+
 
 
 @dataclass
@@ -19,12 +21,13 @@ class Room:
 
 
 class BoardGame:
-    def __init__(self, board_file: str, doors_file: str, num_tokens: int):
+    def __init__(self, board_file: str, doors_file: str, num_agents: int):
         pygame.init()
         self.paused = False
+        self.selected_agent = None
         self.CELL_SIZE = 40
         self.rooms: Dict[str, Room] = {}
-        self.tokens: List[Token] = []
+        self.agents: List[Agent] = []
         self.doors: Dict[str, Set[str]] = {}
 
         self.controller = GameController(self)
@@ -49,8 +52,8 @@ class BoardGame:
         self.stop_button_rect = pygame.Rect(10, self.height * self.CELL_SIZE + 10, 120, 30)
 
 
-        # Initialize tokens
-        self.initialize_tokens(num_tokens)
+        # Initialize agents
+        self.initialize_agents(num_agents)
         
     def draw_buttons(self):
         """Draw the pause/resume button."""
@@ -61,11 +64,44 @@ class BoardGame:
         text_render = font.render(text, True, (255, 255, 255))
         self.screen.blit(text_render, text_render.get_rect(center=self.stop_button_rect.center))
         
+    def draw_agent_info(self):
+        """Draw conversation history for the selected agent."""
+        if self.selected_agent:
+            font = pygame.font.Font(None, 24)
+            y_offset = self.height * self.CELL_SIZE + 10  # Start below the board
+            x_offset = 10
+            history = self.selected_agent.memory[-5:]  # Show last 5 conversations
+            for line in history:
+                text = font.render(line, True, (0, 0, 0))
+                self.screen.blit(text, (x_offset, y_offset))
+                y_offset += 20
+
+        
     def handle_button_click(self, event):
         """Handle mouse click events for the stop button."""
         if self.stop_button_rect.collidepoint(event.pos):
             self.paused = not self.paused  # Toggle pause state
             print("Simulation paused." if self.paused else "Simulation resumed.")
+            
+    def handle_agent_click(self, event):
+        """Handle mouse clicks on agents to select their conversation history."""
+        for agent in self.agents:
+            # Define the clickable area for the agent
+            agent_rect = pygame.Rect(
+                agent.x * self.CELL_SIZE,
+                agent.y * self.CELL_SIZE,
+                self.CELL_SIZE,
+                self.CELL_SIZE,
+            )
+            if agent_rect.collidepoint(event.pos):
+                self.selected_agent = agent
+                print(f"Selected Agent {agent.id}'s conversation history:")
+                for line in agent.memory:
+                    print(line)
+                break
+        else:
+            self.selected_agent = None  # Deselect if no agent clicked
+
 
 
 
@@ -159,16 +195,18 @@ class BoardGame:
         # Store borders for drawing
         self.borders = self.find_room_borders(lines)
 
-    def initialize_tokens(self, num_tokens: int):
-        """Place tokens randomly on the board."""
+    def initialize_agents(self, num_agents: int):
+        """Place agents randomly on the board."""
         room_ids = list(self.rooms.keys())
-        self.tokens: List[Token] = []
+        self.agents: List[Agent] = []
+        personalities = ["friendly", "hostile", "neutral"]  # Define personality types
 
-        for i in range(num_tokens):
+
+        for i in range(num_agents):
             room_id = random.choice(room_ids)
             room = self.rooms[room_id]
             x, y = random.choice(list(room.cells))
-            token = Token(
+            agent = Agent(
                 id=i,
                 x=x,
                 y=y,
@@ -179,8 +217,10 @@ class BoardGame:
                 ),
                 current_room=room_id,
                 plan=None,
+                personality=random.choice(personalities)  # Assign a random personality
+
             )
-            self.tokens.append(token)
+            self.agents.append(agent)
 
     def find_path_to_room(
         self, start_room: str, target_room: str
@@ -203,13 +243,13 @@ class BoardGame:
 
         return None
 
-    def get_unvisited_connected_room(self, token: Token) -> Optional[str]:
+    def get_unvisited_connected_room(self, agent: Agent) -> Optional[str]:
         """Get a random unvisited connected room, or any connected room if all have been visited."""
-        current_room = self.rooms[token.current_room]
+        current_room = self.rooms[agent.current_room]
         unvisited = [
             room
             for room in current_room.connected_rooms
-            if room not in (token.plan.visited_rooms if token.plan else [])
+            if room not in (agent.plan.visited_rooms if agent.plan else [])
         ]
 
         if unvisited:
@@ -250,52 +290,70 @@ class BoardGame:
         else:
             # Draw solid line
             pygame.draw.line(self.screen, (0, 0, 0), start_pixel, end_pixel, 2)
+    
+    
+    def draw_agents(self):
+        for agent in self.agents:
+            color = (255, 255, 0) if agent == self.selected_agent else agent.color
+            pygame.draw.circle(
+                self.screen,
+                color,
+                (
+                    agent.x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                    agent.y * self.CELL_SIZE + self.CELL_SIZE // 2,
+                ),
+                self.CELL_SIZE // 3,
+            )
 
-    def execute_plan(self, token: Token):
-        """Execute the token's current plan."""
-        token.ensure_plan(self)
 
-        if token.plan.type == PlanType.STAY:
-            token.plan.turns_remaining -= 1
-            if token.plan.turns_remaining <= 0:
-                token.plan = None
+    def execute_plan(self, agent: Agent):
+        """Execute the agent's current plan."""
+        agent.ensure_plan(self)
 
-        elif token.plan.type == PlanType.GOTO_ROOM:
-            path = self.find_path_to_room(token.current_room, token.plan.target)
+        if agent.plan.type == PlanType.STAY:
+            agent.plan.turns_remaining -= 1
+            if agent.plan.turns_remaining <= 0:
+                agent.plan = None
+
+        elif agent.plan.type == PlanType.GOTO_ROOM:
+            path = self.find_path_to_room(agent.current_room, agent.plan.target)
             if path and len(path) > 1:
                 # Move to next room in path
                 next_room = path[1]
                 new_pos = random.choice(list(self.rooms[next_room].cells))
-                token.x, token.y = new_pos
-                token.current_room = next_room
+                agent.x, agent.y = new_pos
+                agent.current_room = next_room
             else:
                 # Either reached target or no path exists
-                token.plan = None
+                agent.plan = None
 
-        elif token.plan.type == PlanType.FIND_TOKEN:
-            target_token = self.tokens[token.plan.target]
-            if token.current_room == target_token.current_room:
-                # Found the target token
-                token.plan = None
+        elif agent.plan.type == PlanType.FIND_AGENT:
+            target_agent = self.agents[agent.plan.target]
+            if agent.current_room == target_agent.current_room:
+                # Found the target agent
+                agent.plan = None
 
             else:
                 # Try to move to an unvisited connected room
-                next_room = self.get_unvisited_connected_room(token)
+                next_room = self.get_unvisited_connected_room(agent)
                 if next_room:
-                    token.plan.visited_rooms.add(next_room)
+                    agent.plan.visited_rooms.add(next_room)
                     new_pos = random.choice(list(self.rooms[next_room].cells))
-                    token.x, token.y = new_pos
-                    token.current_room = next_room
+                    agent.x, agent.y = new_pos
+                    agent.current_room = next_room
                 else:
                     # No more rooms to explore
-                    token.plan = None
+                    agent.plan = None
 
-        token.ensure_plan(self)
+        agent.ensure_plan(self)
 
-    def move_tokens(self):
-        """Move all tokens according to their plans."""
-        for token in self.tokens:
-            self.execute_plan(token)
+    def move_agents(self):
+        """Move all agents according to their plans."""
+        for agent in self.agents:
+            self.execute_plan(agent)
+            
+        self.handle_conversations()
+
 
     def draw_rooms(self):
         for room in self.rooms.values():
@@ -320,10 +378,8 @@ class BoardGame:
 
         # Draw rooms
         self.draw_rooms()
-
-        # Draw tokens with their plan types indicated
-        for token in self.tokens:
-            token.draw(self)
+        
+        self.draw_agents()
 
     def run(self):
         """Main game loop."""
@@ -334,12 +390,18 @@ class BoardGame:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_button_click(event)  # Check for button click
+                    self.handle_agent_click(event)  # Handle agent clicks
+
             if not self.paused:
                 self.controller.handle_events()
-                # self.move_tokens()              # Move agents
+                handle_room_conversations(self.agents, self.controller.turn)
+
+                
+                # self.move_agents()              # Move agents
             
             self.draw()
             self.draw_buttons()
+            self.draw_agent_info() 
             pygame.display.flip()
 
         pygame.quit()

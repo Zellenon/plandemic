@@ -12,7 +12,7 @@ from plan import Plan, PlanType
 class PlanType(Enum):
     STAY = "stay"
     GOTO_ROOM = "goto_room"
-    FIND_TOKEN = "find_token"
+    FIND_AGENT = "find_agent"
 
 @dataclass
 class Agent:
@@ -21,15 +21,27 @@ class Agent:
     y: int
     color: Tuple[int, int, int]
     current_room: str
-    plan: Optional[Plan] = None
+    memory: List[str] = field(default_factory=list)  # Stores conversation history
+    last_conversation_turn: int = -1  # Tracks the last turn the agent conversed
+    plan: Optional[Plan] = None  # Current goal or action plan
+    personality: str = field(default_factory=lambda: random.choice(["friendly", "hostile", "neutral"]))
+    
+
+    def remember_conversation(self, other_id: int, dialogue: str):
+        """Store a conversation in the agent's memory."""
+        self.memory.append(f"With {other_id}: {dialogue}")
+        # Limit memory to the last 10 conversations
+        if len(self.memory) > 10:
+            self.memory.pop(0)
+
 
     def ensure_plan(self, board):
-        """Ensures the token has a plan by generating a new one if current plan is None"""
+        """Ensures the agent has a plan by generating a new one if current plan is None"""
         if not self.plan:
             self.choose_random_plan(board)
 
     def choose_random_plan(self, board):
-        """Choose a random new plan for a token."""
+        """Choose a random new plan for a agent."""
         plan_type = random.choice(list(PlanType))
         new_plan = None
 
@@ -50,13 +62,13 @@ class Agent:
                 visited_rooms={self.current_room},
             )
 
-        else:  # FIND_TOKEN
-            # Choose a random token that's not this one
-            available_tokens = {t.id for t in board.tokens} - {self.id}
-            target_token = random.choice(list(available_tokens))
+        else:  # FIND_AGENT
+            # Choose a random agent that's not this one
+            available_agents = {t.id for t in board.agents} - {self.id}
+            target_agent = random.choice(list(available_agents))
             new_plan = Plan(
-                type=PlanType.FIND_TOKEN,
-                target=target_token,
+                type=PlanType.FIND_AGENT,
+                target=target_agent,
                 visited_rooms={self.current_room},
             )
 
@@ -129,9 +141,9 @@ class Agent:
                             ),
                             2,
                         )
-            elif self.plan.type == PlanType.FIND_TOKEN:
+            elif self.plan.type == PlanType.FIND_AGENT:
                 # Draw an arrow pointing towards the desired self
-                target_self = board.tokens[self.plan.target]
+                target_self = board.agents[self.plan.target]
                 target_x, target_y = (
                     target_self.x * board.CELL_SIZE + board.CELL_SIZE // 2,
                     target_self.y * board.CELL_SIZE + board.CELL_SIZE // 2,
