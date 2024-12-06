@@ -3,7 +3,7 @@ from dialogue import generate_dialogue
 
 def try_conversation(agent1, agent2, current_turn):
     """Attempt a conversation between two agents."""
-    conversation_chance = 0.99  # 50% chance
+    conversation_chance = 0.30  # 30% chance
     cooldown_turns = 3        # Minimum turns between conversations
 
     if (random.random() < conversation_chance and

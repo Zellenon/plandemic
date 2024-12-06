@@ -1,8 +1,8 @@
-import openai
-import os
+from openai import OpenAI
+from config import OPENAI_API_KEY
 
-# Set your OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
+# Instantiate the OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 def generate_dialogue(agent1, agent2):
     """Generate dialogue between two agents using OpenAI API."""
@@ -13,8 +13,9 @@ def generate_dialogue(agent1, agent2):
     """
     user_message = f"You are interacting with {agent2.personality}. Generate a response based on your personality."
 
-    response = openai.Chat.create(
-        model="gpt-4",  # Use "gpt-4" or "gpt-3.5-turbo" based on your API access
+    # Call the updated `client.chat.completions.create` method
+    response = client.chat.completions.create(
+        model="gpt-4",  # or "gpt-3.5-turbo" based on access
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
@@ -23,4 +24,5 @@ def generate_dialogue(agent1, agent2):
         temperature=0.7,
     )
 
-    return response['choices'][0]['message']['content']
+    # Access the content from the response
+    return response.choices[0].message.content
