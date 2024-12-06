@@ -21,6 +21,7 @@ class Room:
 class BoardGame:
     def __init__(self, board_file: str, doors_file: str, num_tokens: int):
         pygame.init()
+        self.paused = False
         self.CELL_SIZE = 40
         self.rooms: Dict[str, Room] = {}
         self.tokens: List[Token] = []
@@ -44,11 +45,29 @@ class BoardGame:
         )
         pygame.display.set_caption("Board Game Framework")
 
-        # Create "Next Turn" button
-        self.button_rect = pygame.Rect(10, self.height * self.CELL_SIZE + 10, 120, 30)
+        # Create "Stop" button
+        self.stop_button_rect = pygame.Rect(10, self.height * self.CELL_SIZE + 10, 120, 30)
+
 
         # Initialize tokens
         self.initialize_tokens(num_tokens)
+        
+    def draw_buttons(self):
+        """Draw the pause/resume button."""
+        color = (200, 50, 50) if not self.paused else (50, 200, 50)  # Red for running, green for paused
+        pygame.draw.rect(self.screen, color, self.stop_button_rect)
+        font = pygame.font.Font(None, 24)
+        text = "Pause" if not self.paused else "Resume"
+        text_render = font.render(text, True, (255, 255, 255))
+        self.screen.blit(text_render, text_render.get_rect(center=self.stop_button_rect.center))
+        
+    def handle_button_click(self, event):
+        """Handle mouse click events for the stop button."""
+        if self.stop_button_rect.collidepoint(event.pos):
+            self.paused = not self.paused  # Toggle pause state
+            print("Simulation paused." if self.paused else "Simulation resumed.")
+
+
 
     def load_doors(self, doors_file: str):
         """Load door connections from file."""
@@ -313,9 +332,14 @@ class BoardGame:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-
-            self.controller.handle_events()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.handle_button_click(event)  # Check for button click
+            if not self.paused:
+                self.controller.handle_events()
+                # self.move_tokens()              # Move agents
+            
             self.draw()
+            self.draw_buttons()
             pygame.display.flip()
 
         pygame.quit()
