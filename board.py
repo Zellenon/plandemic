@@ -18,6 +18,8 @@ class Room:
     cells: Set[Tuple[int, int]]
     connected_rooms: Set[str]
     color: Tuple[int, int, int]
+    doors: List[Tuple[int, int]] = field(default_factory=list)  # Positions of all doors
+
 
 
 class BoardGame:
@@ -106,17 +108,28 @@ class BoardGame:
 
 
     def load_doors(self, doors_file: str):
-        """Load door connections from file."""
+        """Load door connections from file and assign them to rooms."""
         self.doors = {}
         with open(doors_file, "r") as f:
             for line in f:
                 room1, room2 = line.strip()
+
+                # Initialize sets for connected rooms if not present
                 if room1 not in self.doors:
                     self.doors[room1] = set()
                 if room2 not in self.doors:
                     self.doors[room2] = set()
+
+                # Add bi-directional connection
                 self.doors[room1].add(room2)
                 self.doors[room2].add(room1)
+
+        # Assign door connections to Room objects
+        for room_id, connected_rooms in self.doors.items():
+            if room_id in self.rooms:
+                room = self.rooms[room_id]
+                room.connected_rooms = connected_rooms
+
 
     def find_room_borders(
         self, board_lines: List[str]
@@ -164,13 +177,19 @@ class BoardGame:
         with open(board_file, "r") as f:
             lines = [line.strip() for line in f.readlines()]
 
-        # Collect cells for each room
+        # Collect cells for each room and identify walls
         room_cells: Dict[str, Set[Tuple[int, int]]] = {}
+        self.walls: Set[Tuple[int, int]] = set()  # Initialize walls
+
         for y, line in enumerate(lines):
             for x, cell in enumerate(line):
-                if cell not in room_cells:
-                    room_cells[cell] = set()
-                room_cells[cell].add((x, y))
+                if cell.isalnum():  # Room characters (digits or letters)
+                    if cell not in room_cells:
+                        room_cells[cell] = set()
+                    room_cells[cell].add((x, y))
+                else:
+                    # Any other character is treated as a wall
+                    self.walls.add((x, y))
 
         # Generate random colors for rooms
         colors = {
@@ -194,6 +213,7 @@ class BoardGame:
 
         # Store borders for drawing
         self.borders = self.find_room_borders(lines)
+
 
     def initialize_agents(self, num_agents: int):
         """Place agents randomly on the board."""
@@ -382,7 +402,7 @@ class BoardGame:
         self.draw_agents()
 
     def run(self):
-        """Main game loop."""
+        """Main game loop to manage agents and board rendering."""
         running = True
         while running:
             for event in pygame.event.get():
@@ -396,12 +416,34 @@ class BoardGame:
                 self.controller.handle_events()
                 handle_room_conversations(self.agents, self.controller.turn)
 
-                
-                # self.move_agents()              # Move agents
-            
+                # Update agents
+                for agent in self.agents:
+                    # Ensure the agent has a plan
+                    agent.ensure_plan(self)
+
+                    # Set target if none exists
+                    if agent.plan and agent.target_x is None and agent.target_y is None:
+                        if agent.plan.type == PlanType.GOTO_ROOM:
+                            target_room_id = agent.plan.target
+                            agent.set_target(target_room_id, self)
+                        elif agent.plan.type == PlanType.STAY:
+                            # Choose a random cell within the current room
+                            target_cell = random.choice(list(self.rooms[agent.current_room].cells))
+                            agent.set_target(agent.current_room, self)
+
+                    # Move the agent
+                    agent.move_toward_target(self)
+
+            # Render the board and agents
             self.draw()
             self.draw_buttons()
-            self.draw_agent_info() 
-            pygame.display.flip()
+            self.draw_agent_info()
+            pygame.display.flip()  # Refresh the screen with all drawn elements
+
+            # Add a delay for smooth rendering
+            pygame.time.delay(50)  # 20 FPS
 
         pygame.quit()
+
+
+

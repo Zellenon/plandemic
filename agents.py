@@ -25,6 +25,9 @@ class Agent:
     last_conversation_turn: int = -1  # Tracks the last turn the agent conversed
     plan: Optional[Plan] = None  # Current goal or action plan
     personality: str = field(default_factory=lambda: random.choice(["friendly", "hostile", "neutral"]))
+    target_x: Optional[int] = None  # Target x-coordinate for movement
+    target_y: Optional[int] = None  # Target y-coordinate for movement
+    move_speed: float = 0.025        # Speed of movement (fraction of a grid cell per frame)
     
 
     def remember_conversation(self, other_id: int, dialogue: str):
@@ -177,3 +180,50 @@ class Agent:
                         ),
                         2,
                     )
+
+    def is_close(agent1, agent2, distance_threshold=5.0):
+        """Check if two agents are within a specified distance threshold."""
+        distance = math.sqrt((agent1.x - agent2.x)**2 + (agent1.y - agent2.y)**2)
+        return distance <= distance_threshold
+    
+    def move_toward_target(self, board):
+        """Move the agent incrementally toward the target position."""
+        if self.target_x is None or self.target_y is None:
+            return
+
+        # Calculate the direction vector
+        dx = self.target_x - self.x
+        dy = self.target_y - self.y
+        distance = (dx**2 + dy**2)**0.5
+
+        # If the agent is already close enough, snap to the target
+        if distance < self.move_speed:
+            self.x = self.target_x
+            self.y = self.target_y
+            self.target_x = None
+            self.target_y = None
+            return
+
+        # Normalize the direction vector and scale by move_speed
+        if distance > 0:
+            self.x += (dx / distance) * self.move_speed
+            self.y += (dy / distance) * self.move_speed
+
+
+    def set_target(self, target_room_id, board):
+        """Set a new target position, ensuring agents use doors to move between rooms."""
+        if self.current_room == target_room_id:
+            # Target is within the same room
+            target_cell = random.choice(list(board.rooms[self.current_room].cells))
+            self.target_x, self.target_y = target_cell
+        else:
+            # Find all doors connecting to the target room
+            doors_to_target = [
+                door for door in board.rooms[self.current_room].doors
+                if target_room_id in board.doors[self.current_room]
+            ]
+            if doors_to_target:
+                # Pick the first door as the target (or use logic to pick the closest door)
+                self.target_x, self.target_y = doors_to_target[0]
+
+
