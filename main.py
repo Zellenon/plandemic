@@ -12,5 +12,6 @@ from board import BoardGame
 
 # Example usage
 if __name__ == "__main__":
-    game = BoardGame("board.txt", "doors.txt", num_agents=5)
+    game = BoardGame("board.txt", "doors.txt", num_agents=1)
     game.run()
+

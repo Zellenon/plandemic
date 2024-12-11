@@ -15,7 +15,7 @@ def generate_dialogue(agent1, agent2):
 
     # Call the updated `client.chat.completions.create` method
     response = client.chat.completions.create(
-        model="gpt-4",  # or "gpt-3.5-turbo" based on access
+        model="gpt-3.5-turbo",  # or "gpt-3.5-turbo" based on access
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
