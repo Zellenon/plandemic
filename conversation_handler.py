@@ -3,10 +3,19 @@ from dialogue import generate_dialogue
 
 def try_conversation(agent1, agent2, current_turn):
     """Attempt a conversation between two agents."""
-    conversation_chance = 0.30  # 30% chance
-    cooldown_turns = 3        # Minimum turns between conversations
+    conversation_chance = 0.01
+    cooldown_turns = 6
+    max_distance = 2.0  # Maximum distance for conversation in grid cells
 
-    if (random.random() < conversation_chance and
+    # First check if they're in the same room
+    if agent1.current_room != agent2.current_room:
+        return
+
+    # Then check distance between agents
+    distance = ((agent1.x - agent2.x) ** 2 + (agent1.y - agent2.y) ** 2) ** 0.5
+    
+    if (distance <= max_distance and
+        random.random() < conversation_chance and
         current_turn - agent1.last_conversation_turn >= cooldown_turns and
         current_turn - agent2.last_conversation_turn >= cooldown_turns):
 

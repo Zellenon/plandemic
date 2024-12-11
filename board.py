@@ -9,6 +9,7 @@ from collections import deque
 from agents import Agent, Plan, PlanType
 from controller import GameController
 from conversation_handler import handle_room_conversations
+from doors import DoorManager, Door
 
 
 
@@ -28,12 +29,12 @@ class BoardGame:
         self.CELL_SIZE = 40
         self.rooms: Dict[str, Room] = {}
         self.agents: List[Agent] = []
-        self.doors: Dict[str, Set[str]] = {}
-
+        
+        self.door_manager = DoorManager()
         self.controller = GameController(self)
 
         # Load and parse the board and doors files
-        self.load_doors(doors_file)
+        self.door_manager.load_from_file(doors_file)
         self.load_board(board_file)
 
         # Calculate window dimensions
@@ -104,20 +105,6 @@ class BoardGame:
 
 
 
-
-    def load_doors(self, doors_file: str):
-        """Load door connections from file."""
-        self.doors = {}
-        with open(doors_file, "r") as f:
-            for line in f:
-                room1, room2 = line.strip()
-                if room1 not in self.doors:
-                    self.doors[room1] = set()
-                if room2 not in self.doors:
-                    self.doors[room2] = set()
-                self.doors[room1].add(room2)
-                self.doors[room2].add(room1)
-
     def find_room_borders(
         self, board_lines: List[str]
     ) -> List[Tuple[Tuple[int, int], Tuple[int, int], str, str]]:
@@ -160,40 +147,38 @@ class BoardGame:
         return borders
 
     def load_board(self, board_file: str):
-        """Load and parse the board layout from a text file."""
+        """Load and parse the board file."""
         with open(board_file, "r") as f:
-            lines = [line.strip() for line in f.readlines()]
+            board_lines = [line.strip() for line in f.readlines()]
 
-        # Collect cells for each room
-        room_cells: Dict[str, Set[Tuple[int, int]]] = {}
-        for y, line in enumerate(lines):
-            for x, cell in enumerate(line):
-                if cell not in room_cells:
-                    room_cells[cell] = set()
-                room_cells[cell].add((x, y))
-
-        # Generate random colors for rooms
-        colors = {
-            room_id: (
-                random.randint(50, 200),
-                random.randint(50, 200),
-                random.randint(50, 200),
-            )
-            for room_id in room_cells.keys()
-        }
-
-        # Create rooms
-        for room_id, cells in room_cells.items():
-            connected = self.doors.get(room_id, set())
-            self.rooms[room_id] = Room(
-                id=room_id,
-                cells=cells,
-                connected_rooms=connected,
-                color=colors[room_id],
-            )
-
-        # Store borders for drawing
-        self.borders = self.find_room_borders(lines)
+        # Process each character in the board file
+        for y, line in enumerate(board_lines):
+            for x, char in enumerate(line):
+                if char == " ":
+                    continue
+                if char not in self.rooms:
+                    # Generate a pastel color based on room ID
+                    color_seed = sum(ord(c) for c in char)
+                    random.seed(color_seed)
+                    color = (
+                        random.randint(100, 200),
+                        random.randint(100, 200),
+                        random.randint(100, 200)
+                    )
+                    random.seed()  # Reset seed
+                    
+                    self.rooms[char] = Room(
+                        id=char,
+                        color=color,
+                        cells=set(),
+                        connected_rooms=set()
+                    )
+                self.rooms[char].cells.add((x, y))
+                connected = self.door_manager.room_connections.get(char, set())
+                self.rooms[char].connected_rooms.update(connected)
+        
+        # Find and store borders
+        self.borders = self.find_room_borders(board_lines)
 
     def initialize_agents(self, num_agents: int):
         """Place agents randomly on the board."""
@@ -224,17 +209,19 @@ class BoardGame:
 
     def find_path_to_room(
         self, start_room: str, target_room: str
-    ) -> Optional[List[str]]:
-        """Find the shortest path between two rooms using BFS."""
+    ) -> List[str]:
+        """Find path from start_room to target_room using BFS."""
         if start_room == target_room:
             return [start_room]
-
+        
         queue = deque([(start_room, [start_room])])
         visited = {start_room}
-
+        
         while queue:
             current_room, path = queue.popleft()
-            for next_room in self.rooms[current_room].connected_rooms:
+            connected_rooms = self.door_manager.room_connections[current_room]
+            
+            for next_room in connected_rooms:
                 if next_room == target_room:
                     return path + [next_room]
                 if next_room not in visited:
@@ -245,50 +232,28 @@ class BoardGame:
 
     def get_unvisited_connected_room(self, agent: Agent) -> Optional[str]:
         """Get a random unvisited connected room, or any connected room if all have been visited."""
-        current_room = self.rooms[agent.current_room]
+        connected_rooms = self.door_manager.room_connections.get(agent.current_room, set())
         unvisited = [
-            room
-            for room in current_room.connected_rooms
+            room for room in connected_rooms
             if room not in (agent.plan.visited_rooms if agent.plan else [])
         ]
 
         if unvisited:
             return random.choice(unvisited)
-        return (
-            random.choice(list(current_room.connected_rooms))
-            if current_room.connected_rooms
-            else None
-        )
+        return random.choice(list(connected_rooms)) if connected_rooms else None
 
     def draw_border(
         self, start: Tuple[int, int], end: Tuple[int, int], room1: str, room2: str
     ):
-        """Draw a border line segment, either solid or dotted."""
+        """Draw a border line segment."""
         start_pixel = (start[0] * self.CELL_SIZE, start[1] * self.CELL_SIZE)
         end_pixel = (end[0] * self.CELL_SIZE, end[1] * self.CELL_SIZE)
 
         # Check if rooms are connected by a door
-        is_door = room2 in self.doors.get(room1, set())
+        is_door = room2 in self.door_manager.room_connections.get(room1, set())
 
-        if is_door:
-            # Draw dotted line
-            length = (
-                (end_pixel[0] - start_pixel[0]) ** 2
-                + (end_pixel[1] - start_pixel[1]) ** 2
-            ) ** 0.5
-            dash_length = 5
-            num_dashes = int(length / (dash_length * 2))
-
-            for i in range(num_dashes):
-                t1 = i / num_dashes
-                t2 = (i + 0.5) / num_dashes
-                x1 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t1
-                y1 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t1
-                x2 = start_pixel[0] + (end_pixel[0] - start_pixel[0]) * t2
-                y2 = start_pixel[1] + (end_pixel[1] - start_pixel[1]) * t2
-                pygame.draw.line(self.screen, (0, 0, 0), (x1, y1), (x2, y2), 2)
-        else:
-            # Draw solid line
+        if not is_door:
+            # Only draw solid line for non-door borders
             pygame.draw.line(self.screen, (0, 0, 0), start_pixel, end_pixel, 2)
     
     
@@ -306,8 +271,25 @@ class BoardGame:
             )
 
 
-    def execute_plan(self, agent: Agent):
+    def execute_plan(self, agent):
         """Execute the agent's current plan."""
+        # if agent.id == 0:  # Debug only for agent 0
+            # print(f"\nDEBUG - Agent {agent.id} executing plan:")
+            # print(f"  Current position: ({agent.x}, {agent.y}) in {agent.current_room}")
+            # print(f"  Current plan: {agent.plan}")
+            # print(f"  Current target: ({agent.target_x}, {agent.target_y})")
+            # print(f"  Remaining waypoints: {agent.waypoints}")
+        
+        # If agent reached current target and has more waypoints
+        if (agent.target_x is None and agent.target_y is None and agent.waypoints):
+            next_waypoint = agent.waypoints[0]
+            # Validate movement to next waypoint
+            # if agent.id == 0:
+            #     print(f"Agent {agent.id} moving to next waypoint: {next_waypoint}")
+            agent.set_target(next_waypoint[0], next_waypoint[1], self)
+            if agent.target_x is not None:  # Only remove waypoint if target was set successfully
+                agent.waypoints = agent.waypoints[1:]
+
         agent.ensure_plan(self)
 
         if agent.plan.type == PlanType.STAY:
@@ -316,36 +298,23 @@ class BoardGame:
                 agent.plan = None
 
         elif agent.plan.type == PlanType.GOTO_ROOM:
-            path = self.find_path_to_room(agent.current_room, agent.plan.target)
-            if path and len(path) > 1:
-                # Move to next room in path
-                next_room = path[1]
-                new_pos = random.choice(list(self.rooms[next_room].cells))
-                agent.x, agent.y = new_pos
-                agent.current_room = next_room
-            else:
-                # Either reached target or no path exists
+            # Update room if agent has moved to a new one
+            new_room = self.get_room_at_position(agent.x, agent.y, agent.current_room)
+            if new_room and new_room != agent.current_room:
+                agent.current_room = new_room
+                if agent.plan:
+                    agent.plan.visited_rooms.add(new_room)
+        
+            # Check if we've reached our target room and have no more movement to do
+            if (agent.current_room == agent.plan.target and 
+                not agent.waypoints and 
+                agent.target_x is None and 
+                agent.target_y is None):
                 agent.plan = None
+                if agent.id == 0:
+                    print(f"  Completed GOTO_ROOM plan to room {agent.current_room}")
 
-        elif agent.plan.type == PlanType.FIND_AGENT:
-            target_agent = self.agents[agent.plan.target]
-            if agent.current_room == target_agent.current_room:
-                # Found the target agent
-                agent.plan = None
-
-            else:
-                # Try to move to an unvisited connected room
-                next_room = self.get_unvisited_connected_room(agent)
-                if next_room:
-                    agent.plan.visited_rooms.add(next_room)
-                    new_pos = random.choice(list(self.rooms[next_room].cells))
-                    agent.x, agent.y = new_pos
-                    agent.current_room = next_room
-                else:
-                    # No more rooms to explore
-                    agent.plan = None
-
-        agent.ensure_plan(self)
+        agent.update_position(self)
 
     def move_agents(self):
         """Move all agents according to their plans."""
@@ -368,40 +337,187 @@ class BoardGame:
                         self.CELL_SIZE,
                     ),
                 )
+                # Add coordinate text at top-left
+                # font = pygame.font.Font(None, 20)
+                # coord_text = font.render(f"{x},{y}", True, (0, 0, 0))
+                # self.screen.blit(coord_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + 5))
+                
+                # # Add room ID in red at bottom-left
+                # font = pygame.font.Font(None, 20)
+                # room_text = font.render(room.id, True, (255, 0, 0))
+                # self.screen.blit(room_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + self.CELL_SIZE - 20))
 
         for start, end, room1, room2 in self.borders:
             self.draw_border(start, end, room1, room2)
 
-    def draw(self):
-        """Draw the current game state."""
-        self.screen.fill((255, 255, 255))
+    def draw_door(self, door: Door):
+        """Draw a door as a line between rooms."""
+        start_pos = (door.x1 * self.CELL_SIZE, door.y1 * self.CELL_SIZE)
+        end_pos = (door.x2 * self.CELL_SIZE, door.y2 * self.CELL_SIZE)
+        
+        pygame.draw.line(
+            self.screen,
+            (255, 255, 0),  # Yellow color
+            start_pos,
+            end_pos,
+            3  # Line width
+        )
 
-        # Draw rooms
+    def draw(self):
+        """Draw the game state."""
+        # Draw rooms and walls first
         self.draw_rooms()
         
+        # Draw doors as lines
+        for door in self.door_manager.doors:
+            self.draw_door(door)
+        
+        # Draw agents
         self.draw_agents()
+        
+        # Draw target positions for debugging
+        for agent in self.agents:
+            if agent.target_x is not None and agent.target_y is not None:
+                pygame.draw.circle(
+                    self.screen,
+                    (255, 0, 0),  # Red target indicator
+                    (
+                        agent.target_x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                        agent.target_y * self.CELL_SIZE + self.CELL_SIZE // 2
+                    ),
+                    2
+                )
 
     def run(self):
         """Main game loop."""
         running = True
+        clock = pygame.time.Clock()
+        
         while running:
+            # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    self.handle_button_click(event)  # Check for button click
-                    self.handle_agent_click(event)  # Handle agent clicks
-
+                    # Check if pause button was clicked
+                    if self.stop_button_rect.collidepoint(event.pos):
+                        self.paused = not self.paused
+                    
+            # Only update game state if not paused
             if not self.paused:
+                self.update()
                 self.controller.handle_events()
                 handle_room_conversations(self.agents, self.controller.turn)
-
-                
-                # self.move_agents()              # Move agents
             
+            # Draw everything (even when paused)
+            self.screen.fill((0, 0, 0))
             self.draw()
-            self.draw_buttons()
-            self.draw_agent_info() 
+            self.draw_buttons()  # Make sure buttons are drawn
             pygame.display.flip()
+            
+            # Cap the frame rate
+            clock.tick(30)
 
-        pygame.quit()
+    def update(self):
+        """Main update loop."""
+        for agent in self.agents:
+            # Update agent position
+            target_reached = agent.update_position(self)
+            
+            # If target reached and no new target set, need new plan
+            if target_reached and agent.needs_new_target():
+                self.choose_new_plan(agent)
+
+    def choose_new_plan(self, agent):
+        """Choose and set up a new plan for the agent."""
+        if agent.plan is None or agent.plan.type == PlanType.STAY:
+            # Choose random room
+            available_rooms = list(set(self.rooms.keys()) - {agent.current_room})
+            target_room = random.choice(available_rooms)
+            
+            # Get all possible positions in target room except current position
+            possible_positions = [
+                pos for pos in self.rooms[target_room].cells 
+                if pos != (int(agent.x), int(agent.y))
+            ]
+            
+            if possible_positions:  # Only proceed if we have valid positions
+                target_pos = random.choice(possible_positions)
+                agent.set_target(target_pos[0], target_pos[1], self)
+                agent.plan = Plan(
+                    type=PlanType.GOTO_ROOM,
+                    target=target_room
+                )
+
+    def get_room_at_position(self, x: float, y: float, current_room: Optional[str] = None) -> Optional[str]:
+        cell_x, cell_y = int(x), int(y)
+        # print(f"\nDEBUG - Getting room at ({cell_x}, {cell_y}):")
+        # print(f"  Current room hint: {current_room}")
+        
+        # If we have a current room, first check if we're at a door
+        if current_room:
+            # Get all doors connected to current room
+            doors = self.door_manager.get_doors_for_room(current_room)
+            for door in doors:
+                door_pos = self.door_manager.get_door_position(door.room1, door.room2)
+                if door_pos and (cell_x, cell_y) == door_pos:
+                    print(f"  Found door position between {door.room1} and {door.room2}")
+                    # Get the other room
+                    other_room = door.room2 if current_room == door.room1 else door.room1
+                    
+                    # When exactly at door position, allow transition to next room in path
+                    if door.connects_rooms(current_room, other_room):
+                        return other_room
+                    
+        # If not at a door, stay in current room if position is valid
+        if current_room and (cell_x, cell_y) in self.rooms[current_room].cells:
+            return current_room
+            
+        # If no current room or position not in current room, find containing room
+        for room_id, room in self.rooms.items():
+            if (cell_x, cell_y) in room.cells:
+                print(f"  Position found in room: {room_id}")
+                return room_id
+        
+        print("  ERROR: Position not found in any room!")
+        return None
+    def find_path_through_doors(self, agent: Agent, target_x: int, target_y: int) -> List[Tuple[float, float]]:
+        """Find a path from agent's position to target that goes through doors."""
+        # print(f"\nDEBUG - Agent {agent.id} pathfinding:")
+        # print(f"  From: ({agent.x}, {agent.y}) in room {agent.current_room}")
+        # print(f"  To: ({target_x}, {target_y})")
+        
+        target_room = self.get_room_at_position(target_x, target_y)
+        # print(f"  Target room: {target_room}")
+        
+        if not target_room:
+            print("  ERROR: No target room found!")
+            return []
+        
+        if agent.current_room == target_room:
+            # print("  Same room - using direct path")
+            if (agent.x, agent.y) == (target_x, target_y):
+                return []
+            return [(target_x, target_y)]
+        
+        room_path = self.find_path_to_room(agent.current_room, target_room)
+        print(f"  Room path: {room_path}")
+        
+        if not room_path:
+            print("  ERROR: No room path found!")
+            return []
+        
+        waypoints = []
+        for i in range(len(room_path) - 1):
+            current_room = room_path[i]
+            next_room = room_path[i + 1]
+            door_pos = self.door_manager.get_door_position(current_room, next_room)
+            if door_pos:
+                waypoints.append(door_pos)
+                # print(f"  Added door waypoint: {door_pos} between {current_room}->{next_room}")
+            # else:
+                # print(f"  ERROR: No door found between {current_room} and {next_room}")
+        
+        waypoints.append((target_x, target_y))
+        # print(f"  Final waypoints: {waypoints}")
+        return waypoints
