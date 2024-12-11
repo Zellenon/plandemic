@@ -8,8 +8,6 @@ from enum import Enum
 from collections import deque
 from board import BoardGame
 
-
-
 # Example usage
 if __name__ == "__main__":
     game = BoardGame("board.txt", "doors.txt", num_agents=5)
