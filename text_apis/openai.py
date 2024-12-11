@@ -14,7 +14,7 @@ class OpenAIAPI(ServiceAPI):
     @override
     def generate_text(self, messages: List[Message], chat_settings: Dict):
         response = self.client.chat.completions.create(
-            model="gpt-4",  # or "gpt-3.5-turbo" based on access
+            model="gpt-3.5-turbo",  # or "gpt-3.5-turbo" based on access
             messages=messages,
             max_tokens=chat_settings["tokens"],
             temperature=chat_settings["temp"],
