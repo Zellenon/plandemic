@@ -273,19 +273,19 @@ class BoardGame:
 
     def execute_plan(self, agent):
         """Execute the agent's current plan."""
-        if agent.id == 0:  # Debug only for agent 0
-            print(f"\nDEBUG - Agent {agent.id} executing plan:")
-            print(f"  Current position: ({agent.x}, {agent.y}) in {agent.current_room}")
-            print(f"  Current plan: {agent.plan}")
-            print(f"  Current target: ({agent.target_x}, {agent.target_y})")
-            print(f"  Remaining waypoints: {agent.waypoints}")
+        # if agent.id == 0:  # Debug only for agent 0
+            # print(f"\nDEBUG - Agent {agent.id} executing plan:")
+            # print(f"  Current position: ({agent.x}, {agent.y}) in {agent.current_room}")
+            # print(f"  Current plan: {agent.plan}")
+            # print(f"  Current target: ({agent.target_x}, {agent.target_y})")
+            # print(f"  Remaining waypoints: {agent.waypoints}")
         
         # If agent reached current target and has more waypoints
         if (agent.target_x is None and agent.target_y is None and agent.waypoints):
             next_waypoint = agent.waypoints[0]
             # Validate movement to next waypoint
-            if agent.id == 0:
-                print(f"Agent {agent.id} moving to next waypoint: {next_waypoint}")
+            # if agent.id == 0:
+            #     print(f"Agent {agent.id} moving to next waypoint: {next_waypoint}")
             agent.set_target(next_waypoint[0], next_waypoint[1], self)
             if agent.target_x is not None:  # Only remove waypoint if target was set successfully
                 agent.waypoints = agent.waypoints[1:]
@@ -338,14 +338,14 @@ class BoardGame:
                     ),
                 )
                 # Add coordinate text at top-left
-                font = pygame.font.Font(None, 20)
-                coord_text = font.render(f"{x},{y}", True, (0, 0, 0))
-                self.screen.blit(coord_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + 5))
+                # font = pygame.font.Font(None, 20)
+                # coord_text = font.render(f"{x},{y}", True, (0, 0, 0))
+                # self.screen.blit(coord_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + 5))
                 
-                # Add room ID in red at bottom-left
-                font = pygame.font.Font(None, 20)
-                room_text = font.render(room.id, True, (255, 0, 0))
-                self.screen.blit(room_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + self.CELL_SIZE - 20))
+                # # Add room ID in red at bottom-left
+                # font = pygame.font.Font(None, 20)
+                # room_text = font.render(room.id, True, (255, 0, 0))
+                # self.screen.blit(room_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + self.CELL_SIZE - 20))
 
         for start, end, room1, room2 in self.borders:
             self.draw_border(start, end, room1, room2)
@@ -416,7 +416,7 @@ class BoardGame:
             pygame.display.flip()
             
             # Cap the frame rate
-            clock.tick(10)
+            clock.tick(30)
 
     def update(self):
         """Main update loop."""
@@ -451,8 +451,8 @@ class BoardGame:
 
     def get_room_at_position(self, x: float, y: float, current_room: Optional[str] = None) -> Optional[str]:
         cell_x, cell_y = int(x), int(y)
-        print(f"\nDEBUG - Getting room at ({cell_x}, {cell_y}):")
-        print(f"  Current room hint: {current_room}")
+        # print(f"\nDEBUG - Getting room at ({cell_x}, {cell_y}):")
+        # print(f"  Current room hint: {current_room}")
         
         # If we have a current room, first check if we're at a door
         if current_room:
@@ -483,19 +483,19 @@ class BoardGame:
         return None
     def find_path_through_doors(self, agent: Agent, target_x: int, target_y: int) -> List[Tuple[float, float]]:
         """Find a path from agent's position to target that goes through doors."""
-        print(f"\nDEBUG - Agent {agent.id} pathfinding:")
-        print(f"  From: ({agent.x}, {agent.y}) in room {agent.current_room}")
-        print(f"  To: ({target_x}, {target_y})")
+        # print(f"\nDEBUG - Agent {agent.id} pathfinding:")
+        # print(f"  From: ({agent.x}, {agent.y}) in room {agent.current_room}")
+        # print(f"  To: ({target_x}, {target_y})")
         
         target_room = self.get_room_at_position(target_x, target_y)
-        print(f"  Target room: {target_room}")
+        # print(f"  Target room: {target_room}")
         
         if not target_room:
             print("  ERROR: No target room found!")
             return []
         
         if agent.current_room == target_room:
-            print("  Same room - using direct path")
+            # print("  Same room - using direct path")
             if (agent.x, agent.y) == (target_x, target_y):
                 return []
             return [(target_x, target_y)]
@@ -514,10 +514,10 @@ class BoardGame:
             door_pos = self.door_manager.get_door_position(current_room, next_room)
             if door_pos:
                 waypoints.append(door_pos)
-                print(f"  Added door waypoint: {door_pos} between {current_room}->{next_room}")
-            else:
-                print(f"  ERROR: No door found between {current_room} and {next_room}")
+                # print(f"  Added door waypoint: {door_pos} between {current_room}->{next_room}")
+            # else:
+                # print(f"  ERROR: No door found between {current_room} and {next_room}")
         
         waypoints.append((target_x, target_y))
-        print(f"  Final waypoints: {waypoints}")
+        # print(f"  Final waypoints: {waypoints}")
         return waypoints

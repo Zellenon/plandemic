@@ -54,61 +54,17 @@ class Agent:
     
     def update_position(self, board) -> bool:
         """Update position using cardinal movement."""
+        # If no target, get next waypoint
         if self.target_x is None or self.target_y is None:
-            if self.waypoints:
-                next_waypoint = self.waypoints[0]
-                current_room = board.get_room_at_position(next_waypoint[0], next_waypoint[1])
-                
-                if current_room != self.current_room:
-                    # We need to go through a door
-                    door = board.door_manager.get_door_between_rooms(self.current_room, current_room)
-                    if door:
-                        door_pos = board.door_manager.get_door_position(door.room1, door.room2)
-                        # Check if we've crossed the threshold
-                        if door.is_horizontal():
-                            crossed = (self.current_room == door.room1 and self.y > door_pos[1]) or \
-                                    (self.current_room == door.room2 and self.y < door_pos[1])
-                        else:  # vertical door
-                            crossed = (self.current_room == door.room1 and self.x > door_pos[0]) or \
-                                    (self.current_room == door.room2 and self.x < door_pos[0])
-                        
-                        if crossed:
-                            # We've crossed the threshold, update room and proceed
-                            self.current_room = current_room
-                            self.waypoints.pop(0)
-                            self.target_x, self.target_y = next_waypoint
-                        else:
-                            # Calculate position just inside the next room
-                            if door.is_horizontal():
-                                # Move one cell above/below the door
-                                entry_y = door_pos[1] + (1 if self.current_room == door.room1 else -1)
-                                entry_pos = (door_pos[0], entry_y)
-                            else:  # vertical door
-                                # Move one cell left/right of the door
-                                entry_x = door_pos[0] + (1 if self.current_room == door.room1 else -1)
-                                entry_pos = (entry_x, door_pos[1])
-                                
-                            if (self.x, self.y) == entry_pos:
-                                # We're fully through the door, proceed to next waypoint
-                                self.current_room = current_room
-                                self.waypoints.pop(0)
-                                self.target_x, self.target_y = next_waypoint
-                            else:
-                                # Move to entry position first
-                                self.target_x, self.target_y = entry_pos
-                            return False
-                
-                # If in same room or no door needed, proceed to waypoint
-                self.waypoints.pop(0)
-                self.target_x, self.target_y = next_waypoint
-                if self.id == 0:
-                    print(f"Agent {self.id} moving to next waypoint: ({self.target_x}, {self.target_y})")
-                return False
-            
-            self.ensure_plan(board)
-            return True
-
-        # Decide whether to move horizontally first, then vertically
+            if not self.waypoints:
+                self.stuck = True
+                return True
+            next_waypoint = self.waypoints[0]
+            self.target_x, self.target_y = next_waypoint
+            self.waypoints.pop(0)
+            return False
+        
+        # Calculate movement
         dx = self.target_x - self.x
         dy = self.target_y - self.y
         
@@ -118,9 +74,8 @@ class Agent:
             self.y = self.target_y
             self.target_x = None
             self.target_y = None
-            if self.id == 0:
-                print(f"Agent {self.id} reached target: ({self.x}, {self.y})")
-            return self.update_position(board)  # Check for next waypoint
+            # Don't recursively call update_position, let the next frame handle it
+            return not bool(self.waypoints)
             
         # Move horizontally first, then vertically
         if abs(dx) > self.speed:
@@ -149,54 +104,49 @@ class Agent:
 
     def choose_random_plan(self, board):
         """Choose a random new plan for an agent."""
-        if self.stuck:
-            # If agent is stuck, force a GOTO_ROOM plan
-            plan_type = PlanType.GOTO_ROOM
-        else:
-            plan_type = random.choice([PlanType.STAY, PlanType.GOTO_ROOM])
+        attempts = 0
+        max_attempts = 5  # Prevent infinite loops
         
-        new_plan = None
-
-        if plan_type == PlanType.STAY:
-            new_plan = Plan(
-                type=PlanType.STAY, 
-                target=None, 
-                turns_remaining=random.randint(1, 4)
-            )
-            self.stuck = False  # Reset stuck flag when choosing to stay
-
-        elif plan_type == PlanType.GOTO_ROOM:
-            # Choose a random room that's not the current room
-            available_rooms = {room_id for room_id in board.rooms.keys()} - {self.current_room}
-            if not available_rooms:
-                return None  # No available rooms to move to
-            
-            target_room = random.choice(list(available_rooms))
-            
-            # Get all possible positions except current position
-            possible_positions = [
-                pos for pos in board.rooms[target_room].cells 
-                if pos != (int(self.x), int(self.y))
-            ]
-            
-            if possible_positions:  # Only proceed if we have valid positions
-                target_pos = random.choice(possible_positions)
-                if self.id == 0:
-                    print(f"Agent {self.id} selected target room: {target_room}, position: {target_pos}")
-                
-                self.set_target(target_pos[0], target_pos[1], board)
-                new_plan = Plan(
-                    type=PlanType.GOTO_ROOM,
-                    target=target_room,
-                    visited_rooms={self.current_room},
-                )
-                self.stuck = False  # Reset stuck flag when successfully setting new target
+        while attempts < max_attempts:
+            if self.stuck:
+                plan_type = PlanType.GOTO_ROOM
             else:
-                self.stuck = True
-                print(f"Agent {self.id} is stuck in room {self.current_room} - no valid positions available")
-                return None
+                plan_type = random.choice([PlanType.STAY, PlanType.GOTO_ROOM])
+            
+            if plan_type == PlanType.STAY:
+                new_plan = Plan(
+                    type=PlanType.STAY, 
+                    target=None, 
+                    turns_remaining=random.randint(1, 4)
+                )
+                self.stuck = False
+                self.plan = new_plan
+                return
 
-        self.plan = new_plan
+            elif plan_type == PlanType.GOTO_ROOM:
+                # Choose a random room that's not the current room
+                available_rooms = {room_id for room_id in board.rooms.keys()} - {self.current_room}
+                if not available_rooms:
+                    attempts += 1
+                    continue
+                
+                target_room = random.choice(list(available_rooms))
+                possible_positions = [
+                    pos for pos in board.rooms[target_room].cells 
+                    if pos != (int(self.x), int(self.y))
+                ]
+                
+                if possible_positions:
+                    target_pos = random.choice(possible_positions)
+                    self.set_target(target_pos[0], target_pos[1], board)
+                    if self.target_x is not None:  # Only create plan if pathfinding succeeded
+                        new_plan = Plan(
+                            type=PlanType.GOTO_ROOM,
+                            target=target_room,
+                            visited_rooms={self.current_room}
+                        )
+                        self.stuck = False
+                        self.plan = new
 
     def draw(self, board):
         pygame.draw.circle(
