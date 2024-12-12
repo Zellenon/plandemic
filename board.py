@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple, Optional, Union
 from enum import Enum
 from collections import deque
+from PIL import Image
 
 from agents import Agent, Plan, PlanType
 from controller import GameController
@@ -57,6 +58,58 @@ class BoardGame:
         # Initialize agents
         self.initialize_agents(num_agents)
         
+        self.textures = {}
+        self.load_textures()
+        
+    def load_textures(self):
+        """Load all game textures."""
+        try:
+            # Load the stone texture for room 6
+            stone_texture = pygame.image.load('assets/stonefloor1.jpg')
+            mossy_texture = pygame.image.load('assets/mossyfloor2.jpg')
+            wood_texture = pygame.image.load('assets/woodfloor1.jpg')
+            wood_texture2 = pygame.image.load('assets/woodfloor2.jpg')
+            cobble_texture = pygame.image.load('assets/cobble1.jpg')
+            wood_texture3 = pygame.image.load('assets/woodfloor3.jpg')
+            grass_texture = pygame.image.load('assets/grass.jpg')
+            dirt_texture = pygame.image.load('assets/dirt.jpg')
+            water_texture = pygame.image.load('assets/water.jpg')
+            
+            # Scale textures to match cell size
+            stone_texture = pygame.transform.scale(stone_texture, (self.CELL_SIZE , self.CELL_SIZE))
+            mossy_texture = pygame.transform.scale(mossy_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture = pygame.transform.scale(wood_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture2 = pygame.transform.scale(wood_texture2, (self.CELL_SIZE, self.CELL_SIZE))
+            cobble_texture = pygame.transform.scale(cobble_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture3 = pygame.transform.scale(wood_texture3, (self.CELL_SIZE, self.CELL_SIZE))
+            grass_texture = pygame.transform.scale(grass_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            dirt_texture = pygame.transform.scale(dirt_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            water_texture = pygame.transform.scale(water_texture, (self.CELL_SIZE, self.CELL_SIZE))
+
+            # Convert the images for faster rendering
+            self.textures['1'] = grass_texture.convert_alpha()
+            self.textures['2'] = dirt_texture.convert_alpha()
+            self.textures['3'] = cobble_texture.convert_alpha()
+            self.textures['4'] = water_texture.convert_alpha()
+            self.textures['5'] = wood_texture2.convert_alpha()
+            self.textures['6'] = stone_texture.convert_alpha()
+            self.textures['7'] = mossy_texture.convert_alpha()
+            self.textures['8'] = wood_texture.convert_alpha()
+            self.textures['9'] = wood_texture2.convert_alpha()
+            self.textures['a'] = wood_texture.convert_alpha()
+            self.textures['b'] = mossy_texture.convert_alpha()
+            self.textures['c'] = wood_texture2.convert_alpha()
+            self.textures['d'] = wood_texture3.convert_alpha()
+            self.textures['e'] = stone_texture.convert_alpha()
+            self.textures['f'] = wood_texture2.convert_alpha()
+            self.textures['g'] = wood_texture3.convert_alpha()
+            self.textures['h'] = cobble_texture.convert_alpha()
+        except pygame.error as e:
+            print(f"Could not load texture: {e}")
+            for id, texture in self.textures:
+                self.textures[id] = None
+
+            
     def draw_buttons(self):
         """Draw the pause/resume button."""
         color = (200, 50, 50) if not self.paused else (50, 200, 50)  # Red for running, green for paused
@@ -316,27 +369,33 @@ class BoardGame:
 
 
     def draw_rooms(self):
-        for room in self.rooms.values():
+        """Draw all rooms with textures where available."""
+        # Fill the screen with black first to clear any background
+        self.screen.fill((0, 0, 0))
+        
+        # Draw each room
+        for room_id, room in self.rooms.items():
+            # Get room bounds
             for x, y in room.cells:
-                pygame.draw.rect(
-                    self.screen,
-                    room.color,
-                    (
-                        x * self.CELL_SIZE,
-                        y * self.CELL_SIZE,
-                        self.CELL_SIZE,
-                        self.CELL_SIZE,
-                    ),
-                )
-                # Add coordinate text at top-left
-                # font = pygame.font.Font(None, 20)
-                # coord_text = font.render(f"{x},{y}", True, (0, 0, 0))
-                # self.screen.blit(coord_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + 5))
-                
-                # # Add room ID in red at bottom-left
-                # font = pygame.font.Font(None, 20)
-                # room_text = font.render(room.id, True, (255, 0, 0))
-                # self.screen.blit(room_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + self.CELL_SIZE - 20))
+                if room_id in self.textures and self.textures[room_id]:
+                    # Draw texture only for rooms that have textures
+                    texture = self.textures[room_id]
+                    self.screen.blit(
+                        texture,
+                        (x * self.CELL_SIZE, y * self.CELL_SIZE)
+                    )
+                else:
+                    # Draw solid color for rooms without textures
+                    pygame.draw.rect(
+                        self.screen,
+                        room.color,
+                        (
+                            x * self.CELL_SIZE,
+                            y * self.CELL_SIZE,
+                            self.CELL_SIZE,
+                            self.CELL_SIZE,
+                        ),
+                    )
 
         for start, end, room1, room2 in self.borders:
             self.draw_border(start, end, room1, room2)
