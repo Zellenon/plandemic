@@ -3,7 +3,7 @@ from dialogue import generate_dialogue
 
 def try_conversation(agent1, agent2, current_turn):
     """Attempt a conversation between two agents."""
-    conversation_chance = 0.01
+    conversation_chance = 0.001
     cooldown_turns = 6
     max_distance = 2.0  # Maximum distance for conversation in grid cells
 

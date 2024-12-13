@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple, Optional, Union
 from enum import Enum
 from collections import deque
+from PIL import Image
 
 from agents import Agent, Plan, PlanType
 from controller import GameController
@@ -45,8 +46,9 @@ class BoardGame:
 
         # Initialize display
         self.screen = pygame.display.set_mode(
-            (self.width * self.CELL_SIZE, self.height * self.CELL_SIZE + 50)
+            (self.width * self.CELL_SIZE + 300, self.height * self.CELL_SIZE + 50)
         )
+
         pygame.display.set_caption("Board Game Framework")
 
         # Create "Stop" button
@@ -56,6 +58,58 @@ class BoardGame:
         # Initialize agents
         self.initialize_agents(num_agents)
         
+        self.textures = {}
+        self.load_textures()
+        
+    def load_textures(self):
+        """Load all game textures."""
+        try:
+            # Load the stone texture for room 6
+            stone_texture = pygame.image.load('assets/stonefloor1.jpg')
+            mossy_texture = pygame.image.load('assets/mossyfloor2.jpg')
+            wood_texture = pygame.image.load('assets/woodfloor1.jpg')
+            wood_texture2 = pygame.image.load('assets/woodfloor2.jpg')
+            cobble_texture = pygame.image.load('assets/cobble1.jpg')
+            wood_texture3 = pygame.image.load('assets/woodfloor3.jpg')
+            grass_texture = pygame.image.load('assets/grass.jpg')
+            dirt_texture = pygame.image.load('assets/dirt.jpg')
+            water_texture = pygame.image.load('assets/water.jpg')
+            
+            # Scale textures to match cell size
+            stone_texture = pygame.transform.scale(stone_texture, (self.CELL_SIZE , self.CELL_SIZE))
+            mossy_texture = pygame.transform.scale(mossy_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture = pygame.transform.scale(wood_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture2 = pygame.transform.scale(wood_texture2, (self.CELL_SIZE, self.CELL_SIZE))
+            cobble_texture = pygame.transform.scale(cobble_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            wood_texture3 = pygame.transform.scale(wood_texture3, (self.CELL_SIZE, self.CELL_SIZE))
+            grass_texture = pygame.transform.scale(grass_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            dirt_texture = pygame.transform.scale(dirt_texture, (self.CELL_SIZE, self.CELL_SIZE))
+            water_texture = pygame.transform.scale(water_texture, (self.CELL_SIZE, self.CELL_SIZE))
+
+            # Convert the images for faster rendering
+            self.textures['1'] = grass_texture.convert_alpha()
+            self.textures['2'] = dirt_texture.convert_alpha()
+            self.textures['3'] = cobble_texture.convert_alpha()
+            self.textures['4'] = water_texture.convert_alpha()
+            self.textures['5'] = wood_texture2.convert_alpha()
+            self.textures['6'] = stone_texture.convert_alpha()
+            self.textures['7'] = mossy_texture.convert_alpha()
+            self.textures['8'] = wood_texture.convert_alpha()
+            self.textures['9'] = wood_texture2.convert_alpha()
+            self.textures['a'] = wood_texture.convert_alpha()
+            self.textures['b'] = mossy_texture.convert_alpha()
+            self.textures['c'] = wood_texture2.convert_alpha()
+            self.textures['d'] = wood_texture3.convert_alpha()
+            self.textures['e'] = stone_texture.convert_alpha()
+            self.textures['f'] = wood_texture2.convert_alpha()
+            self.textures['g'] = wood_texture3.convert_alpha()
+            self.textures['h'] = cobble_texture.convert_alpha()
+        except pygame.error as e:
+            print(f"Could not load texture: {e}")
+            for id, texture in self.textures:
+                self.textures[id] = None
+
+            
     def draw_buttons(self):
         """Draw the pause/resume button."""
         color = (200, 50, 50) if not self.paused else (50, 200, 50)  # Red for running, green for paused
@@ -73,7 +127,7 @@ class BoardGame:
             x_offset = 10
             history = self.selected_agent.memory[-5:]  # Show last 5 conversations
             for line in history:
-                text = font.render(line, True, (0, 0, 0))
+                text = font.render(line, True, (255, 255, 255))
                 self.screen.blit(text, (x_offset, y_offset))
                 y_offset += 20
 
@@ -273,19 +327,11 @@ class BoardGame:
 
     def execute_plan(self, agent):
         """Execute the agent's current plan."""
-        # if agent.id == 0:  # Debug only for agent 0
-            # print(f"\nDEBUG - Agent {agent.id} executing plan:")
-            # print(f"  Current position: ({agent.x}, {agent.y}) in {agent.current_room}")
-            # print(f"  Current plan: {agent.plan}")
-            # print(f"  Current target: ({agent.target_x}, {agent.target_y})")
-            # print(f"  Remaining waypoints: {agent.waypoints}")
+
         
         # If agent reached current target and has more waypoints
         if (agent.target_x is None and agent.target_y is None and agent.waypoints):
             next_waypoint = agent.waypoints[0]
-            # Validate movement to next waypoint
-            # if agent.id == 0:
-            #     print(f"Agent {agent.id} moving to next waypoint: {next_waypoint}")
             agent.set_target(next_waypoint[0], next_waypoint[1], self)
             if agent.target_x is not None:  # Only remove waypoint if target was set successfully
                 agent.waypoints = agent.waypoints[1:]
@@ -311,8 +357,6 @@ class BoardGame:
                 agent.target_x is None and 
                 agent.target_y is None):
                 agent.plan = None
-                if agent.id == 0:
-                    print(f"  Completed GOTO_ROOM plan to room {agent.current_room}")
 
         agent.update_position(self)
 
@@ -325,27 +369,33 @@ class BoardGame:
 
 
     def draw_rooms(self):
-        for room in self.rooms.values():
+        """Draw all rooms with textures where available."""
+        # Fill the screen with black first to clear any background
+        self.screen.fill((0, 0, 0))
+        
+        # Draw each room
+        for room_id, room in self.rooms.items():
+            # Get room bounds
             for x, y in room.cells:
-                pygame.draw.rect(
-                    self.screen,
-                    room.color,
-                    (
-                        x * self.CELL_SIZE,
-                        y * self.CELL_SIZE,
-                        self.CELL_SIZE,
-                        self.CELL_SIZE,
-                    ),
-                )
-                # Add coordinate text at top-left
-                # font = pygame.font.Font(None, 20)
-                # coord_text = font.render(f"{x},{y}", True, (0, 0, 0))
-                # self.screen.blit(coord_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + 5))
-                
-                # # Add room ID in red at bottom-left
-                # font = pygame.font.Font(None, 20)
-                # room_text = font.render(room.id, True, (255, 0, 0))
-                # self.screen.blit(room_text, (x * self.CELL_SIZE + 5, y * self.CELL_SIZE + self.CELL_SIZE - 20))
+                if room_id in self.textures and self.textures[room_id]:
+                    # Draw texture only for rooms that have textures
+                    texture = self.textures[room_id]
+                    self.screen.blit(
+                        texture,
+                        (x * self.CELL_SIZE, y * self.CELL_SIZE)
+                    )
+                else:
+                    # Draw solid color for rooms without textures
+                    pygame.draw.rect(
+                        self.screen,
+                        room.color,
+                        (
+                            x * self.CELL_SIZE,
+                            y * self.CELL_SIZE,
+                            self.CELL_SIZE,
+                            self.CELL_SIZE,
+                        ),
+                    )
 
         for start, end, room1, room2 in self.borders:
             self.draw_border(start, end, room1, room2)
@@ -402,6 +452,8 @@ class BoardGame:
                     # Check if pause button was clicked
                     if self.stop_button_rect.collidepoint(event.pos):
                         self.paused = not self.paused
+                    else:
+                        self.handle_agent_click(event)
                     
             # Only update game state if not paused
             if not self.paused:
@@ -413,7 +465,9 @@ class BoardGame:
             self.screen.fill((0, 0, 0))
             self.draw()
             self.draw_buttons()  # Make sure buttons are drawn
+            self.draw_sidebar()
             pygame.display.flip()
+            
             
             # Cap the frame rate
             clock.tick(30)
@@ -451,8 +505,6 @@ class BoardGame:
 
     def get_room_at_position(self, x: float, y: float, current_room: Optional[str] = None) -> Optional[str]:
         cell_x, cell_y = int(x), int(y)
-        # print(f"\nDEBUG - Getting room at ({cell_x}, {cell_y}):")
-        # print(f"  Current room hint: {current_room}")
         
         # If we have a current room, first check if we're at a door
         if current_room:
@@ -483,10 +535,7 @@ class BoardGame:
         return None
     def find_path_through_doors(self, agent: Agent, target_x: int, target_y: int) -> List[Tuple[float, float]]:
         """Find a path from agent's position to target that goes through doors."""
-        # print(f"\nDEBUG - Agent {agent.id} pathfinding:")
-        # print(f"  From: ({agent.x}, {agent.y}) in room {agent.current_room}")
-        # print(f"  To: ({target_x}, {target_y})")
-        
+
         target_room = self.get_room_at_position(target_x, target_y)
         # print(f"  Target room: {target_room}")
         
@@ -521,3 +570,92 @@ class BoardGame:
         waypoints.append((target_x, target_y))
         # print(f"  Final waypoints: {waypoints}")
         return waypoints
+    
+    def draw_agent_conversation(self, agent):
+        font = pygame.font.SysFont(None, 24)
+        x_offset = 10
+        y_offset = 10
+
+        panel_width = 300
+        panel_height = 200
+        panel_rect = pygame.Rect(x_offset, y_offset, panel_width, panel_height)
+        
+        # Draw a dark background panel for readability
+        pygame.draw.rect(self.screen, (50, 50, 50), panel_rect)
+        # Draw a white border
+        pygame.draw.rect(self.screen, (255, 255, 255), panel_rect, 2)
+
+        # Small margin inside the panel
+        text_x = x_offset + 10
+        text_y = y_offset + 10
+
+        header_text = font.render(f"Agent {agent.id}'s Conversation:", True, (255, 255, 255))
+        self.screen.blit(header_text, (text_x, text_y))
+        text_y += 30
+
+        # Render each line of the agent's memory
+        for line in agent.memory:
+            line_text = font.render(line, True, (200, 200, 200))
+            self.screen.blit(line_text, (text_x, text_y))
+            text_y += 30
+            # Stop if we run out of space (optional)
+            if text_y > y_offset + panel_height - 30:
+                break
+            
+    def draw_sidebar(self):
+        """Draw a sidebar to display conversation history."""
+        sidebar_width = 300  # Width of the sidebar
+        sidebar_x = self.width * self.CELL_SIZE  # Sidebar starts after the game grid
+        sidebar_y = 0
+        sidebar_height = self.height * self.CELL_SIZE  # Match the game grid height
+
+        # Draw the sidebar background
+        pygame.draw.rect(
+            self.screen,
+            (50, 50, 50),  # Dark gray
+            (sidebar_x, sidebar_y, sidebar_width, sidebar_height),
+        )
+
+        # If an agent is selected, draw their conversation history
+        if self.selected_agent:
+            font = pygame.font.Font(None, 24)
+            y_offset = 20  # Start drawing text with some margin
+            x_offset = sidebar_x + 10  # Add padding inside the sidebar
+
+            # Draw header
+            header_text = font.render(f"Agent {self.selected_agent.id}'s History:", True, (255, 255, 255))  # White text
+            self.screen.blit(header_text, (x_offset, y_offset))
+            y_offset += 40  # Add space after the header
+
+            # Draw the last 5 lines of conversation with wrapping
+            history = self.selected_agent.memory[-5:]  # Show the last 5 lines
+            for line in history:
+                wrapped_lines = self.wrap_text(line, font, sidebar_width - 20)  # Wrap text to fit the sidebar
+                for wrapped_line in wrapped_lines:
+                    text = font.render(wrapped_line, True, (200, 200, 200))  # Light gray text
+                    self.screen.blit(text, (x_offset, y_offset))
+                    y_offset += 30  # Add spacing between lines
+                    if y_offset > sidebar_height - 30:
+                        break  # Stop drawing if the text goes out of bounds
+
+    @staticmethod
+    def wrap_text(text, font, max_width):
+        """Split text into lines that fit within a given width."""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+
+        for word in words:
+            current_line.append(word)
+            # Render the current line to check its width
+            if font.size(' '.join(current_line))[0] > max_width:
+                # If too wide, remove the last word and finalize the current line
+                current_line.pop()
+                lines.append(' '.join(current_line))
+                current_line = [word]
+
+        # Add the last line
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        return lines

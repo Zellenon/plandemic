@@ -152,7 +152,7 @@ class Agent:
                             visited_rooms={self.current_room},
                         )
                         self.stuck = False
-                        self.plan = new
+                        self.plan = new_plan
 
     def draw(self, board):
         pygame.draw.circle(
