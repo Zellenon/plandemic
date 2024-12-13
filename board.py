@@ -7,10 +7,13 @@ from enum import Enum
 from collections import deque
 from PIL import Image
 
-from agents import Agent, Plan, PlanType
+from agents import Agent
+from plan import Plan, PlanType
 from controller import GameController
 from conversation_handler import handle_room_conversations
 from doors import DoorManager, Door
+from roles import Role
+from cauldron import Cauldron
 
 
 
@@ -61,9 +64,27 @@ class BoardGame:
         self.textures = {}
         self.load_textures()
         
+        self.cauldron = Cauldron(x=10, y=7)  # Center of a 21x21 board
+        
+        # List of ingredient names
+        self.ingredients_list = ["eye", "shroom", "berry"]  # Add more as needed
+        eye_texture = pygame.image.load("assets/ingredients/eye.png").convert_alpha()
+        shroom_texture = pygame.image.load("assets/ingredients/shroom.png").convert_alpha()
+        berry_texture = pygame.image.load("assets/ingredients/berry.png").convert_alpha()
+        self.ingredients_sprites = {
+            "eye": pygame.transform.scale(eye_texture, (self.CELL_SIZE, self.CELL_SIZE))    ,
+            "shroom": pygame.transform.scale(shroom_texture, (self.CELL_SIZE, self.CELL_SIZE)),
+            "berry": pygame.transform.scale(berry_texture, (self.CELL_SIZE, self.CELL_SIZE)),
+        }
+        
     def load_textures(self):
         """Load all game textures."""
         try:
+            # Load the cauldron texture
+            cauldron_texture = pygame.image.load('assets/cauldron.png')
+            cauldron_texture = pygame.transform.scale(cauldron_texture, (self.CELL_SIZE, self.CELL_SIZE))  # Scale to cell size
+            self.textures['cauldron'] = cauldron_texture.convert_alpha()
+            
             # Load the stone texture for room 6
             stone_texture = pygame.image.load('assets/stonefloor1.jpg')
             mossy_texture = pygame.image.load('assets/mossyfloor2.jpg')
@@ -75,6 +96,8 @@ class BoardGame:
             dirt_texture = pygame.image.load('assets/dirt.jpg')
             water_texture = pygame.image.load('assets/water.jpg')
             
+            
+            
             # Scale textures to match cell size
             stone_texture = pygame.transform.scale(stone_texture, (self.CELL_SIZE , self.CELL_SIZE))
             mossy_texture = pygame.transform.scale(mossy_texture, (self.CELL_SIZE, self.CELL_SIZE))
@@ -85,6 +108,7 @@ class BoardGame:
             grass_texture = pygame.transform.scale(grass_texture, (self.CELL_SIZE, self.CELL_SIZE))
             dirt_texture = pygame.transform.scale(dirt_texture, (self.CELL_SIZE, self.CELL_SIZE))
             water_texture = pygame.transform.scale(water_texture, (self.CELL_SIZE, self.CELL_SIZE))
+
 
             # Convert the images for faster rendering
             self.textures['1'] = grass_texture.convert_alpha()
@@ -238,28 +262,51 @@ class BoardGame:
         """Place agents randomly on the board."""
         room_ids = list(self.rooms.keys())
         self.agents: List[Agent] = []
-        personalities = ["friendly", "hostile", "neutral"]  # Define personality types
+        personalities = [
+            "friendly", 
+            "hostile", 
+            "neutral", 
+            "suspicious", 
+            "curious", 
+            "aggressive", 
+            "cautious", 
+            "cheerful", 
+            "sarcastic"
+        ]
 
+        # Randomly select one impostor
+        impostor_index = random.randint(0, num_agents - 1)
 
         for i in range(num_agents):
             room_id = random.choice(room_ids)
             room = self.rooms[room_id]
             x, y = random.choice(list(room.cells))
+            
+            # Assign role based on index
+            role = Role.IMPOSTOR if i == impostor_index else Role.WITCH
+            
+            # Set color: red for impostor, random for others
+            color = (255, 0, 0) if role == Role.IMPOSTOR else (
+                random.randint(0, 255),
+                random.randint(0, 255),
+                random.randint(0, 255),
+            )
+            
             agent = Agent(
                 id=i,
                 x=x,
                 y=y,
-                color=(
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                ),
+                color=color,  # Use the determined color
                 current_room=room_id,
                 plan=None,
-                personality=random.choice(personalities)  # Assign a random personality
-
+                personality=random.choice(personalities),  # Assign a random personality
+                role=role  # Assign the role
             )
             self.agents.append(agent)
+
+        # Print roles and personalities for verification
+        for agent in self.agents:
+            print(f"Agent {agent.id} is a {agent.role.value} with personality: {agent.personality}.")
 
     def find_path_to_room(
         self, start_room: str, target_room: str
@@ -327,38 +374,60 @@ class BoardGame:
 
     def execute_plan(self, agent):
         """Execute the agent's current plan."""
+        if agent.plan.type == PlanType.GO_TO_CAULDRON:
+            # Set target to cauldron position
+            agent.set_target(self.cauldron.x, self.cauldron.y, self)
+            if (agent.x, agent.y) == (self.cauldron.x, self.cauldron.y):
+                # Logic for depositing the ingredient
+                
+                if agent.role == Role.WITCH:
+                    self.cauldron.deposit_ingredient()  # Update cauldron state
+                    print(f"Agent {agent.id} has deposited their ingredient at the cauldron.")
+                else:
+                    print(f"Agent {agent.id} is not a witch, cannot deposit ingredient.")
+                agent.plan = None  # Clear the plan after depositing
+        else:
+            # If agent reached current target and has more waypoints
+            if (agent.target_x is None and agent.target_y is None and agent.waypoints):
+                next_waypoint = agent.waypoints[0]
+                agent.set_target(next_waypoint[0], next_waypoint[1], self)
+                if agent.target_x is not None:  # Only remove waypoint if target was set successfully
+                    agent.waypoints = agent.waypoints[1:]
 
-        
-        # If agent reached current target and has more waypoints
-        if (agent.target_x is None and agent.target_y is None and agent.waypoints):
-            next_waypoint = agent.waypoints[0]
-            agent.set_target(next_waypoint[0], next_waypoint[1], self)
-            if agent.target_x is not None:  # Only remove waypoint if target was set successfully
-                agent.waypoints = agent.waypoints[1:]
+            agent.ensure_plan(self)
 
-        agent.ensure_plan(self)
+            if agent.plan.type == PlanType.STAY:
+                agent.plan.turns_remaining -= 1
+                if agent.plan.turns_remaining <= 0:
+                    agent.plan = None
 
-        if agent.plan.type == PlanType.STAY:
-            agent.plan.turns_remaining -= 1
-            if agent.plan.turns_remaining <= 0:
-                agent.plan = None
+            elif agent.plan.type == PlanType.GOTO_ROOM:
+                # Set the current ingredient when starting to go to a room
+                if agent.current_ingredient is None:
+                    agent.current_ingredient = random.choice(self.ingredients_list)  # Choose a random ingredient
 
-        elif agent.plan.type == PlanType.GOTO_ROOM:
-            # Update room if agent has moved to a new one
-            new_room = self.get_room_at_position(agent.x, agent.y, agent.current_room)
-            if new_room and new_room != agent.current_room:
-                agent.current_room = new_room
-                if agent.plan:
-                    agent.plan.visited_rooms.add(new_room)
-        
-            # Check if we've reached our target room and have no more movement to do
-            if (agent.current_room == agent.plan.target and 
-                not agent.waypoints and 
-                agent.target_x is None and 
-                agent.target_y is None):
-                agent.plan = None
+                # Update room if agent has moved to a new one
+                new_room = self.get_room_at_position(agent.x, agent.y, agent.current_room)
+                if new_room and new_room != agent.current_room:
+                    agent.current_room = new_room
+                    if agent.plan:
+                        agent.plan.visited_rooms.add(new_room)
 
-        agent.update_position(self)
+                # Check if we've reached our target room and have no more movement to do
+                if (agent.current_room == agent.plan.target and 
+                    not agent.waypoints and 
+                    agent.target_x is None and 
+                    agent.target_y is None):
+                    # After reaching the target room, set the plan to go to the cauldron
+                    print(f"Agent {agent.id} reached {agent.plan.target}, heading to cauldron.")
+                    agent.set_target(self.cauldron.x, self.cauldron.y, self)
+                    agent.plan = Plan(
+                        type=PlanType.GO_TO_CAULDRON,
+                        target="cauldron"
+                    )
+                    agent.current_ingredient = None  # Clear the ingredient after reaching the room
+
+            agent.update_position(self)
 
     def move_agents(self):
         """Move all agents according to their plans."""
@@ -413,6 +482,8 @@ class BoardGame:
             3  # Line width
         )
 
+ 
+
     def draw(self):
         """Draw the game state."""
         # Draw rooms and walls first
@@ -425,23 +496,68 @@ class BoardGame:
         # Draw agents
         self.draw_agents()
         
+        # Draw the cauldron
+        self.draw_cauldron()
+        
+        # Draw ingredients
+        
         # Draw target positions for debugging
         for agent in self.agents:
             if agent.target_x is not None and agent.target_y is not None:
-                pygame.draw.circle(
-                    self.screen,
-                    (255, 0, 0),  # Red target indicator
-                    (
-                        agent.target_x * self.CELL_SIZE + self.CELL_SIZE // 2,
-                        agent.target_y * self.CELL_SIZE + self.CELL_SIZE // 2
-                    ),
-                    2
-                )
+                if agent.plan and agent.plan.type == PlanType.GOTO_ROOM:
+                    if agent.current_ingredient:  # Only render if there's a current ingredient
+                        ingredient_sprite = self.ingredients_sprites[agent.current_ingredient]
+                        self.screen.blit(ingredient_sprite, (
+                            agent.target_x * self.CELL_SIZE,
+                            agent.target_y * self.CELL_SIZE
+                        ))
+                else:
+                    pygame.draw.circle(
+                        self.screen,
+                        (255, 0, 0),  # Red target indicator
+                        (
+                            agent.target_x * self.CELL_SIZE + self.CELL_SIZE // 2,
+                            agent.target_y * self.CELL_SIZE + self.CELL_SIZE // 2
+                        ),
+                        2
+                    )
+                
+    async def voting_phase(self, agents):
+        """Conduct the voting phase where agents assess suspicion and vote."""
+        votes = {}
+        
+        for agent in agents:
+            vote_target = await agent.vote(agents)  # Await the vote method
+            if vote_target is not None:
+                if vote_target in votes:
+                    votes[vote_target] += 1
+                else:
+                    votes[vote_target] = 1
 
-    def run(self):
+        # Determine the agent with the most votes
+        if votes:
+            most_voted_agent = max(votes, key=votes.get)
+            print(f"Agent {most_voted_agent} has been accused with {votes[most_voted_agent]} votes.")
+            
+            # Handle the outcome of the vote
+            self.handle_vote_outcome(most_voted_agent)
+        else:
+            print("No votes were cast.")
+
+    def handle_vote_outcome(self, agent_id):
+        """Handle the outcome of the voting phase."""
+        # Logic to remove or mark the agent as out
+        agent_to_remove = next((agent for agent in self.agents if agent.id == agent_id), None)
+        if agent_to_remove:
+            print(f"Agent {agent_to_remove.id} has been voted out of the game.")
+            self.agents.remove(agent_to_remove)  # Remove the agent from the game
+            # Additional logic to handle the game state after an agent is removed
+
+    async def run(self):
         """Main game loop."""
         running = True
         clock = pygame.time.Clock()
+        voting_phase_occurred = False  # Flag to track if voting phase has occurred
         
         while running:
             # Handle events
@@ -449,26 +565,33 @@ class BoardGame:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Check if pause button was clicked
                     if self.stop_button_rect.collidepoint(event.pos):
                         self.paused = not self.paused
                     else:
                         self.handle_agent_click(event)
-                    
+
             # Only update game state if not paused
             if not self.paused:
                 self.update()
                 self.controller.handle_events()
-                handle_room_conversations(self.agents, self.controller.turn)
-            
+                await handle_room_conversations(self.agents, self.controller.turn)
+
+                # Check if the cauldron has enough ingredients and voting phase hasn't occurred
+                if self.cauldron.has_enough_ingredients(3) and not voting_phase_occurred:
+                    await self.voting_phase(self.agents)  # Trigger the voting phase
+                    print("Resetting cauldron ingredients to 0.")  # Debugging statement
+                    self.cauldron.ingredients = 0  # Reset the counter
+                    voting_phase_occurred = True  # Set the flag to indicate voting has occurred
+                else:
+                    voting_phase_occurred = False  # Reset the flag if not enough ingredients
+
             # Draw everything (even when paused)
             self.screen.fill((0, 0, 0))
             self.draw()
             self.draw_buttons()  # Make sure buttons are drawn
             self.draw_sidebar()
             pygame.display.flip()
-            
-            
+
             # Cap the frame rate
             clock.tick(30)
 
@@ -485,22 +608,24 @@ class BoardGame:
     def choose_new_plan(self, agent):
         """Choose and set up a new plan for the agent."""
         if agent.plan is None or agent.plan.type == PlanType.STAY:
-            # Choose random room
+            # Choose a random room to go to
             available_rooms = list(set(self.rooms.keys()) - {agent.current_room})
-            target_room = random.choice(available_rooms)
-            
-            # Get all possible positions in target room except current position
-            possible_positions = [
-                pos for pos in self.rooms[target_room].cells 
-                if pos != (int(agent.x), int(agent.y))
-            ]
-            
-            if possible_positions:  # Only proceed if we have valid positions
-                target_pos = random.choice(possible_positions)
+            if available_rooms:
+                target_room = random.choice(available_rooms)
+                target_pos = random.choice(list(self.rooms[target_room].cells))
                 agent.set_target(target_pos[0], target_pos[1], self)
                 agent.plan = Plan(
                     type=PlanType.GOTO_ROOM,
-                    target=target_room
+                    target=target_room,
+                    visited_rooms={agent.current_room}
+                )
+            else:
+                # If no rooms are available, go to the cauldron
+                print(f"No rooms available for agent {agent.id}, going to cauldron")
+                agent.set_target(self.cauldron.x, self.cauldron.y, self)
+                agent.plan = Plan(
+                    type=PlanType.GO_TO_CAULDRON,
+                    target="cauldron"
                 )
 
     def get_room_at_position(self, x: float, y: float, current_room: Optional[str] = None) -> Optional[str]:
@@ -513,7 +638,7 @@ class BoardGame:
             for door in doors:
                 door_pos = self.door_manager.get_door_position(door.room1, door.room2)
                 if door_pos and (cell_x, cell_y) == door_pos:
-                    print(f"  Found door position between {door.room1} and {door.room2}")
+                    # print(f"  Found door position between {door.room1} and {door.room2}")
                     # Get the other room
                     other_room = door.room2 if current_room == door.room1 else door.room1
                     
@@ -528,7 +653,7 @@ class BoardGame:
         # If no current room or position not in current room, find containing room
         for room_id, room in self.rooms.items():
             if (cell_x, cell_y) in room.cells:
-                print(f"  Position found in room: {room_id}")
+                # print(f"  Position found in room: {room_id}")
                 return room_id
         
         print("  ERROR: Position not found in any room!")
@@ -550,7 +675,7 @@ class BoardGame:
             return [(target_x, target_y)]
         
         room_path = self.find_path_to_room(agent.current_room, target_room)
-        print(f"  Room path: {room_path}")
+        # print(f"  Room path: {room_path}")
         
         if not room_path:
             print("  ERROR: No room path found!")
@@ -659,3 +784,8 @@ class BoardGame:
             lines.append(' '.join(current_line))
 
         return lines
+
+    def draw_cauldron(self):
+        cauldron_x = self.cauldron.x * self.CELL_SIZE
+        cauldron_y = self.cauldron.y * self.CELL_SIZE
+        self.screen.blit(self.textures['cauldron'], (cauldron_x, cauldron_y))

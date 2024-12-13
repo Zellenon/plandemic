@@ -6,6 +6,7 @@ class PlanType(Enum):
     STAY = "stay"
     GOTO_ROOM = "goto_room"
     FIND_AGENT = "find_agent"
+    GO_TO_CAULDRON = "go_to_cauldron"
 
 @dataclass
 class Plan:

@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import List
 
-from agents import Agent
 from text_apis.message import Message
 
 
@@ -37,7 +36,7 @@ class TextAPI:
 
         self.chat_settings = {"tokens": 100, "temp": 0.7}
 
-    def generate(self, messages: List[Message]) -> str:
+    async def generate(self, messages: List[Message]) -> str:
         # Call the updated `client.chat.completions.create` method
         response = self.client.generate_text(
             messages=messages, chat_settings=self.chat_settings
@@ -47,4 +46,4 @@ class TextAPI:
         return response
 
 
-text_controller = TextAPI(TextService.garbage)
+text_controller = TextAPI(TextService.openai)
