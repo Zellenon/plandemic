@@ -26,11 +26,11 @@ async def try_conversation(agent1, agent2, current_turn):
         for _ in range(3):  # Number of exchanges
             # Generate dialogue for agent1
             dialogue1 = await generate_dialogue(agent1, agent2)
-            agent1.remember_conversation(agent2.id, dialogue1)
+            agent1.remember_conversation(agent2.name, dialogue1)
 
             # Generate dialogue for agent2
             dialogue2 = await generate_dialogue(agent2, agent1)
-            agent2.remember_conversation(agent1.id, dialogue2)
+            agent2.remember_conversation(agent1.name, dialogue2)
 
             # Print the conversation for debugging
             print(f"{agent1.name} to {agent2.name}: {dialogue1}")
