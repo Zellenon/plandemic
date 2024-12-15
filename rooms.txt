@@ -1,0 +1,17 @@
+1,The Courtyard
+2,The Eastern Alley
+3,The Northern Alley
+4,The Western Alley
+5,James Holman's House
+6,Will Mester's House
+7,May Hestor's House
+8,The Fletching Hut
+9,The Stockhouse
+a,The Chapel
+b,Jill Mason's House
+c,Lydia Dustin's Hosue
+d,Elleanor Whyrding's House
+e,The Privvy
+f,The Alkemist's Hutte
+g,George Mayweather's House
+h,The Southern Alley

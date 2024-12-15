@@ -19,6 +19,7 @@ from cauldron import Cauldron
 @dataclass
 class Room:
     id: str
+    name: str
     cells: Set[Tuple[int, int]]
     connected_rooms: Set[str]
     color: Tuple[int, int, int]
@@ -258,6 +259,10 @@ class BoardGame:
         """Load and parse the board file."""
         with open(board_file, "r") as f:
             board_lines = [line.strip() for line in f.readlines()]
+        room_names = {
+            v[0]: v[1]
+            for v in map(lambda x: x.strip().split(","), open("rooms.txt").readlines())
+        }
 
         # Process each character in the board file
         for y, line in enumerate(board_lines):
@@ -276,7 +281,11 @@ class BoardGame:
                     random.seed()  # Reset seed
 
                     self.rooms[char] = Room(
-                        id=char, color=color, cells=set(), connected_rooms=set()
+                        id=char,
+                        name=room_names[char],
+                        color=color,
+                        cells=set(),
+                        connected_rooms=set(),
                     )
                 self.rooms[char].cells.add((x, y))
                 connected = self.door_manager.room_connections.get(char, set())
@@ -469,7 +478,7 @@ class BoardGame:
                 ):
                     # After reaching the target room, set the plan to go to the cauldron
                     print(
-                        f"Agent {agent.id} reached {agent.plan.target}, heading to cauldron."
+                        f"Agent {agent.id} reached {self.rooms[agent.plan.target].name}, heading to cauldron."
                     )
                     agent.set_target(self.cauldron.x, self.cauldron.y, self)
                     agent.plan = Plan(type=PlanType.GO_TO_CAULDRON, target="cauldron")
