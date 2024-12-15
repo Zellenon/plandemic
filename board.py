@@ -478,7 +478,7 @@ class BoardGame:
                 ):
                     # After reaching the target room, set the plan to go to the cauldron
                     print(
-                        f"Agent {agent.id} reached {self.rooms[agent.plan.target].name}, heading to cauldron."
+                        f"{agent.name} reached {self.rooms[agent.plan.target].name}, heading to cauldron."
                     )
                     agent.set_target(self.cauldron.x, self.cauldron.y, self)
                     agent.plan = Plan(type=PlanType.GO_TO_CAULDRON, target="cauldron")
@@ -830,7 +830,7 @@ class BoardGame:
             # Draw header
             header_text = font.render(
                 # White text
-                f"Agent {self.selected_agent.id}'s History:",
+                f"{self.selected_agent.name}'s History:",
                 True,
                 (255, 255, 255),
             )
