@@ -31,14 +31,16 @@ async def generate_dialogue(agent1, agent2):
     response = await text_controller.generate(messages)
 
     # Include the agent's ID in the response for clarity
-    return f"Agent {agent1.id}: {response}"
+    return f"{agent1.name}'s: {response}"
+
+
 async def assess_suspicion(dialogues: List[str]) -> List[int]:
     """Assess the suspicion levels of multiple dialogues using OpenAI API."""
     system_prompt = "You are an evaluator of dialogues in a simulation. Your task is to assess the level of suspicion in the following dialogues:\n\n"
 
     # Create a formatted string for all dialogues
     for i, dialogue in enumerate(dialogues):
-        system_prompt += f"Dialogue {i + 1}: \"{dialogue}\"\n"
+        system_prompt += f'Dialogue {i + 1}: "{dialogue}"\n'
 
     system_prompt += "Please rate the suspicion level for each dialogue on a scale from 1 to 10, where 1 is not suspicious at all and 10 is extremely suspicious. Provide a brief explanation for your rating for each dialogue."
 
@@ -50,7 +52,8 @@ async def assess_suspicion(dialogues: List[str]) -> List[int]:
     response = await text_controller.generate(messages)
 
     # Debugging: Print the response to check its structure
-    print("Response from API:", response)  # Add this line to inspect the response
+    # Add this line to inspect the response
+    print("Response from API:", response)
 
     # Parse the response to extract suspicion levels
     suspicion_scores = []

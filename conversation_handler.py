@@ -1,6 +1,7 @@
 import random
 from dialogue import generate_dialogue
 
+
 async def try_conversation(agent1, agent2, current_turn):
     """Attempt a conversation between two agents."""
     conversation_chance = 0.10
@@ -13,11 +14,13 @@ async def try_conversation(agent1, agent2, current_turn):
 
     # Then check distance between agents
     distance = ((agent1.x - agent2.x) ** 2 + (agent1.y - agent2.y) ** 2) ** 0.5
-    
-    if (distance <= max_distance and
-        random.random() < conversation_chance and
-        current_turn - agent1.last_conversation_turn >= cooldown_turns and
-        current_turn - agent2.last_conversation_turn >= cooldown_turns):
+
+    if (
+        distance <= max_distance
+        and random.random() < conversation_chance
+        and current_turn - agent1.last_conversation_turn >= cooldown_turns
+        and current_turn - agent2.last_conversation_turn >= cooldown_turns
+    ):
 
         # Allow for multiple turns of dialogue
         for _ in range(3):  # Number of exchanges
@@ -30,12 +33,13 @@ async def try_conversation(agent1, agent2, current_turn):
             agent2.remember_conversation(agent1.id, dialogue2)
 
             # Print the conversation for debugging
-            print(f"Agent {agent1.id} to Agent {agent2.id}: {dialogue1}")
-            print(f"Agent {agent2.id} to Agent {agent1.id}: {dialogue2}")
+            print(f"{agent1.name} to {agent2.name}: {dialogue1}")
+            print(f"{agent2.name} to {agent1.name}: {dialogue2}")
 
         # Update cooldown
         agent1.last_conversation_turn = current_turn
         agent2.last_conversation_turn = current_turn
+
 
 async def handle_room_conversations(agents, current_turn):
     """Trigger conversations between agents in the same room."""
@@ -53,4 +57,6 @@ async def handle_room_conversations(agents, current_turn):
             for i in range(len(agents_in_room)):
                 for j in range(i + 1, len(agents_in_room)):
                     # Await the try_conversation function
-                    await try_conversation(agents_in_room[i], agents_in_room[j], current_turn)
+                    await try_conversation(
+                        agents_in_room[i], agents_in_room[j], current_turn
+                    )

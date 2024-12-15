@@ -17,6 +17,7 @@ class Agent:
     y: float
     color: Tuple[int, int, int]
     current_room: str
+    name: str
     plan: Optional[Plan] = None
     personality: str = "neutral"
     memory: List[str] = field(default_factory=list)

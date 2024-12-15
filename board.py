@@ -16,7 +16,6 @@ from roles import Role
 from cauldron import Cauldron
 
 
-
 @dataclass
 class Room:
     id: str
@@ -294,6 +293,7 @@ class BoardGame:
             
             agent = Agent(
                 id=i,
+                name=names[i],
                 x=x,
                 y=y,
                 color=color,  # Use the determined color
@@ -306,11 +306,11 @@ class BoardGame:
 
         # Print roles and personalities for verification
         for agent in self.agents:
-            print(f"Agent {agent.id} is a {agent.role.value} with personality: {agent.personality}.")
+            print(
+                f"{agent.name} is a {agent.role.value} with personality: {agent.personality}."
+            )
 
-    def find_path_to_room(
-        self, start_room: str, target_room: str
-    ) -> List[str]:
+    def find_path_to_room(self, start_room: str, target_room: str) -> List[str]:
         """Find path from start_room to target_room using BFS."""
         if start_room == target_room:
             return [start_room]
@@ -321,7 +321,7 @@ class BoardGame:
         while queue:
             current_room, path = queue.popleft()
             connected_rooms = self.door_manager.room_connections[current_room]
-            
+
             for next_room in connected_rooms:
                 if next_room == target_room:
                     return path + [next_room]
@@ -356,8 +356,7 @@ class BoardGame:
         if not is_door:
             # Only draw solid line for non-door borders
             pygame.draw.line(self.screen, (0, 0, 0), start_pixel, end_pixel, 2)
-    
-    
+
     def draw_agents(self):
         for agent in self.agents:
             color = (255, 255, 0) if agent == self.selected_agent else agent.color
