@@ -20,7 +20,7 @@ async def generate_dialogue(agent1, agent2):
         Share your observations and suspicions about the impostor.
         """
 
-    user_message = f"Generate a response based on your current situation, including questions to ask the other agent. Your ID is {agent1.id}."
+    user_message = f"Generate a response based on your current situation, including questions to ask the other agent. Your name is {agent1.name}."
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -31,7 +31,7 @@ async def generate_dialogue(agent1, agent2):
     response = await text_controller.generate(messages)
 
     # Include the agent's ID in the response for clarity
-    return f"{agent1.name}'s: {response}"
+    return f"{agent1.name}: {response}"
 
 
 async def assess_suspicion(dialogues: List[str]) -> List[int]:
