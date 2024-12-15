@@ -63,7 +63,7 @@ async def assess_suspicion(dialogues: List[str]) -> List[int]:
         lines = dialogue.split("\n")
         if len(lines) >= 2 and "Suspicion Level:" in lines[1]:
             try:
-                score = int(lines[1].split(": ")[1])  # Extract the score
+                score = int(lines[1].split(":")[1])  # Extract the score
                 suspicion_scores.append(score)
             except (IndexError, ValueError):
                 raise ValueError("Unexpected response format: {}".format(response))
