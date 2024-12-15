@@ -1,4 +1,5 @@
 import pygame
+import time
 import math
 import random
 from dataclasses import dataclass, field
@@ -33,6 +34,9 @@ class Agent:
     target_y: Optional[float] = None
     waypoints: List[Tuple[float, float]] = field(default_factory=list)
 
+    time_since_last_step = 0
+    step_delay = 0.3
+
     def set_target(self, x: float, y: float, board):
         """Set a new movement target with pathfinding."""
         if (self.x, self.y) == (x, y):
@@ -55,13 +59,16 @@ class Agent:
             return
 
     def update_position(self, board) -> bool:
+
+        current_time = time.time()
+
         """Update position using cardinal movement."""
         # If no target, get next waypoint
         if self.target_x is None or self.target_y is None:
             if not self.waypoints:
                 self.stuck = True
                 return True
-            next_waypoint = self.waypoints[0]
+            next_waypoint = self.waypoints[0] 
             self.target_x, self.target_y = next_waypoint
             self.waypoints.pop(0)
             return False
@@ -80,10 +87,20 @@ class Agent:
             return not bool(self.waypoints)
 
         # Move horizontally first, then vertically
+        moved = False
+
         if abs(dx) > self.speed:
             self.x += self.speed if dx > 0 else -self.speed
+            moved = True
         elif abs(dy) > self.speed:
             self.y += self.speed if dy > 0 else -self.speed
+            moved = True
+
+
+        #if moved play footstep
+        if moved and (current_time - self.time_since_last_step >= self.step_delay):
+            board.footstep_sound.play()
+            self.time_since_last_step = current_time
 
         return False
 

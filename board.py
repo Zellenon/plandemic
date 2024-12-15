@@ -60,6 +60,7 @@ class BoardGame:
         
         self.textures = {}
         self.load_textures()
+        self.load_sound()
         
     def load_textures(self):
         """Load all game textures."""
@@ -108,6 +109,20 @@ class BoardGame:
             print(f"Could not load texture: {e}")
             for id, texture in self.textures:
                 self.textures[id] = None
+    
+    def load_sound(self):
+        try:
+            pygame.mixer.init()  # Initialize the mixer
+            pygame.mixer.music.load('assets/firstGameSoundtrack.mp3')  # Load your music file
+            
+            pygame.mixer.music.set_volume(.05)  # Set volume (0.0 to 1.0)
+            pygame.mixer.music.play(-1)  # Play on loop
+
+            self.footstep_sound = pygame.mixer.Sound('assets/step_sound.wav')
+            self.footstep_sound.set_volume(.3)
+
+        except pygame.error as e:
+            print(f"Error loading background music: {e}")
 
             
     def draw_buttons(self):
