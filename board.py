@@ -254,21 +254,44 @@ class BoardGame:
         room_ids = list(self.rooms.keys())
         self.agents: List[Agent] = []
         personalities = ["friendly", "hostile", "neutral"]  # Define personality types
+        colors = [
+    (0, 0, 0),      # Black
+    (255, 255, 255),# White
+    (128, 128, 128),# Gray
+    (255, 69, 0),   # Red-Orange
+    (0, 128, 0),    # Dark Green
+    (255, 105, 180),# Hot Pink
+    (0, 0, 128),    # Navy Blue
+    (34, 139, 34),  # Forest Green
+    (255, 215, 0),  # Gold
+    (100, 149, 237) # Cornflower Blue
+]
+        used_colors = set()
 
 
         for i in range(num_agents):
             room_id = random.choice(room_ids)
             room = self.rooms[room_id]
             x, y = random.choice(list(room.cells))
+
+            
+            color_choice = random.randint(0,9)
+            while colors[color_choice] in used_colors:
+                color_choice = random.randint(0,9)
+
+            used_colors.add(colors[color_choice])    
+
+
             agent = Agent(
                 id=i,
                 x=x,
                 y=y,
-                color=(
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                    random.randint(0, 255),
-                ),
+                color=colors[color_choice],
+                #(
+                #    random.randint(0, 255),
+                #    random.randint(0, 255),
+                #    random.randint(0, 255),
+                #),
                 current_room=room_id,
                 plan=None,
                 personality=random.choice(personalities)  # Assign a random personality
