@@ -8,19 +8,20 @@ async def generate_dialogue(agent1, agent2):
     if agent1.role == Role.IMPOSTOR:
         # Generate dialogue for the impostor
         system_prompt = f"""
-        You are an impostor witch in a simulation. Your goal is to deceive the other witches.
+        You are an impostor witch in a village of witches. Your goal is to deceive the other witches.
         Engage in a conversation by asking questions to the other witch and responding to their inquiries.
         Try to deflect suspicion and create doubt about the other witches.
         """
     else:
         # Generate dialogue for a regular witch
         system_prompt = f"""
-        You are a witch in a simulation. Your goal is to collect ingredients and identify the impostor.
+        You are a witch in a village. Your goal is to collect ingredients and identify the impostor.
         Engage in a conversation by asking questions to the other witch and responding to their inquiries.
+        There is an imposter among your village. Your goal is to discover the imposter by collaborating with the other witches.
         Share your observations and suspicions about the impostor.
         """
 
-    user_message = f"Generate a response based on your current situation, including questions to ask the other agent. Your name is {agent1.name}."
+    user_message = f"Generate a response based on your current situation, including questions to ask the other agent. Your name is {agent1.name}. You are talking to {agent2.name}"
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -31,7 +32,7 @@ async def generate_dialogue(agent1, agent2):
     response = await text_controller.generate(messages)
 
     # Include the agent's ID in the response for clarity
-    return f"{agent1.name}: {response}"
+    return f"{response}"
 
 
 async def assess_suspicion(dialogues: List[str]) -> List[int]:

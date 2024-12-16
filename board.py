@@ -207,7 +207,7 @@ class BoardGame:
             )
             if agent_rect.collidepoint(event.pos):
                 self.selected_agent = agent
-                print(f"Selected Agent {agent.id}'s conversation history:")
+                print(f"Selected Agent {agent.name}'s conversation history:")
                 for line in agent.memory:
                     print(line)
                 break
@@ -823,7 +823,7 @@ class BoardGame:
 
         # If an agent is selected, draw their conversation history
         if self.selected_agent:
-            font = pygame.font.Font(None, 24)
+            font = pygame.font.Font(None, 18)
             y_offset = 20  # Start drawing text with some margin
             x_offset = sidebar_x + 10  # Add padding inside the sidebar
 
@@ -838,7 +838,7 @@ class BoardGame:
             y_offset += 40  # Add space after the header
 
             # Draw the last 5 lines of conversation with wrapping
-            history = self.selected_agent.memory[-5:]  # Show the last 5 lines
+            history = self.selected_agent.memory[-6:]  # Show the last 5 lines
             for line in history:
                 # Wrap text to fit the sidebar
                 wrapped_lines = self.wrap_text(line, font, sidebar_width - 20)
